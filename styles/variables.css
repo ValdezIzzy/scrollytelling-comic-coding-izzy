@@ -1,0 +1,91 @@
+:root {
+
+/* ---------------- PRIMITIVES ---------------- */
+
+  /* Reds */
+  --red__red10:#fff1f2;
+  --red__red20:#ffe4e6;
+  --red__red30:#fecdd3;
+  --red__red40:#fda4af;
+  --red__red50:#fb7185;
+  --red__red60:#f43f5e;
+  --red__red70:#e11d48;
+  --red__red80:#be123c;
+  --red__red90:#881337;
+
+  /* Yellows */
+  --yellow__yellow10:#fffbeb;
+  --yellow__yellow20:#fef3c7;
+  --yellow__yellow30:#fde68a;
+  --yellow__yellow40:#fcd34d;
+  --yellow__yellow50:#fbbf24;
+  --yellow__yellow60:#f59e0b;
+  --yellow__yellow70:#d97706;
+  --yellow__yellow80:#b45309;
+  --yellow__yellow90:#78350f;
+
+  /* Blues */
+  --blue__blue10:#eff6ff;
+  --blue__blue20:#dbeafe;
+  --blue__blue30:#bfdbfe;
+  --blue__blue40:#93c5fd;
+  --blue__blue50:#60a5fa;
+  --blue__blue60:#3b82f6;
+  --blue__blue70:#2563eb;
+  --blue__blue80:#1d4ed8;
+  --blue__blue90:#1e3a8a;
+
+  /* Neutrals */
+  --neutrals__neutral0:#ffffff;
+  --neutrals__neutral10:#f4f4f4;
+  --neutrals__neutral20:#e4e4e4;
+  --neutrals__neutral40:#a1a1a1;
+  --neutrals__neutral60:#525252;
+  --neutrals__neutral80:#272727;
+  --neutrals__neutral90:#18181b;
+  --neutrals__neutral100:#000000;
+
+
+/* ---------------- SPACING ---------------- */
+
+  --space-4:4px;
+  --space-8:8px;
+  --space-12:12px;
+  --space-16:16px;
+  --space-24:24px;
+  --space-32:32px;
+  --space-48:48px;
+  --space-64:64px;
+  --space-96:96px;
+  --space-128:128px;
+
+
+/* ---------------- SIZING ---------------- */
+
+  --size-h1:128px;
+  --size-h2:96px;
+  --size-h3:72px;
+  --size-h4:48px;
+  --size-h5:32px;
+  --size-body-lg:20px;
+  --size-body:18px;
+  --size-small:14px;
+
+
+/* ---------------- SEMANTIC COLORS ---------------- */
+
+  --surface-primary:var(--neutrals__neutral0);
+  --surface-secondary:var(--neutrals__neutral10);
+  --surface-inverse:var(--neutrals__neutral90);
+
+  --text-primary:var(--neutrals__neutral90);
+  --text-secondary:var(--neutrals__neutral60);
+  --text-inverse:var(--neutrals__neutral0);
+
+  --accent-primary:var(--red__red60);
+  --accent-secondary:var(--blue__blue60);
+  --accent-highlight:var(--yellow__yellow50);
+
+  --border-default:var(--neutrals__neutral20);
+
+}
