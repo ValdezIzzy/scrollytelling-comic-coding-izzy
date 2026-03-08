@@ -8,7 +8,7 @@
     <link rel="stylesheet" href="styles/styles.css">
 </head>
 
-
+<body>
 <main>
   <section class="section--hero" id="hero">
     <div class="section__content">
@@ -28,18 +28,19 @@
     </div>
   </section>
 
-    <section class="section--chapter" id="chapter-2">
-    <div class="section__content">
-      <div class="panel"> <h2>THE BEHAVIORAL LAYER</h2> </div>
-      <div class="panel"> <h5>I learned that <b>Javascript</b> controls behavior.</h5> </div>
-      <div class="panel"> <h5>Alerts.<br>Changing text.<br>Making something react.</h5> </div>
-      <div class="panel"> <h5>Strings.<br>Integers.<br>Linking JS to HTML.</h5> </div>
-      <div class="panel"> <h5>It felt manageable.</h5> </div>
-      <div class="panel"> <h5>I didn't fully understand it yet. But it didn't scare me either.</h5> </div>
-      <div class="svg" id="arrow">
-        <svg class="icon arrow" width="220" height="220" viewBox="0 0 220 220" aria-label="Comic Arrow">
-          <path
-            d="
+<section class="section--chapter" id="chapter-2">
+  <div class="section__content">
+    <div class="panel"> <h2>THE BEHAVIORAL LAYER</h2> </div>
+    <div class="panel"> <h5>I learned that <b>Javascript</b> controls behavior.</h5> </div>
+    <div class="panel"> <h5>Alerts.<br>Changing text.<br>Making something react.</h5> </div>
+    <div class="panel"> <h5>Strings.<br>Integers.<br>Linking JS to HTML.</h5> </div>
+    <div class="panel"> <h5>It felt manageable.</h5> </div>
+    <div class="panel"> <h5>I didn't fully understand it yet. But it didn't scare me either.</h5> </div>
+
+    <div class="svg" id="arrow">
+      <svg class="icon arrow" width="220" height="220" viewBox="0 0 220 220" aria-label="Comic Arrow">
+        <path
+          d="
             M35 110
             L10 70
             L155 70
@@ -55,12 +56,48 @@
           stroke-width="6"
           stroke-linejoin="round"
           stroke-linecap="round"
-          />
-        </svg>
-      </div>
-      <div class="panel"> <p>"-=1"</p> <p>transformOrigin</p> <p>gsap.timeline({})</p> </div>
+        />
+      </svg>
     </div>
-  </section>
+
+    <div class="panel">
+      <p>"-=1"</p>
+      <p>transformOrigin</p>
+      <p>gsap.timeline({})</p>
+    </div>
+  </div>
+
+  <!-- CH2 FX LAYER (outside the grid) -->
+  <div class="ch2-fx" aria-hidden="true">
+    <div id="ch2-bomb">
+      <svg class="icon bomb" width="180" height="180" viewBox="0 0 24 24" aria-label="Bomb">
+        <circle class="bomb-body" cx="12" cy="14" r="6" />
+        <path class="bomb-wick wick" d="M12 7 L12 6 Q12 4.8 11 3" />
+        <rect class="bomb-cap" x="10" y="7" width="4" height="3" />
+        <circle class="bomb-spark" cx="10.7" cy="2.8" r="1.2" />
+      </svg>
+    </div>
+
+    <div id="ch2-boom">
+      <svg class="pow-burst" width="280" height="140" viewBox="0 0 1784 1336" preserveAspectRatio="xMidYMid meet">
+        <path class="pow-shape" fill="#ff6b35" d="M892 1336L769 1234L734 1214L696 1202L627 1202L446 1246L406 1110L390 1084L359 1054L314 1034L121 1002L176 868L178 840L172 810L156 782L128 747L0 660L128 574L156 539L172 511L178 481L176 453L121 319L314 287L359 267L390 237L406 211L446 75L627 119L696 119L734 107L769 87L892 0L1015 87L1050 107L1088 119L1157 119L1338 75L1378 211L1394 237L1425 267L1470 287L1663 319L1608 453L1606 481L1612 511L1628 539L1656 574L1784 660L1656 747L1628 782L1612 810L1606 840L1608 868L1663 1002L1470 1034L1425 1054L1394 1084L1378 1110L1338 1246L1157 1202L1088 1202L1050 1214L1015 1234L892 1336Z"/>
+        <g class="boom-letters" transform="translate(892 760)">
+          <text class="boom-letter" x="-850" y="100">B</text>
+          <text class="boom-letter" x="-500" y="100">O</text>
+          <text class="boom-letter" x="-100" y="100">O</text>
+          <text class="boom-letter" x="300" y="100">M</text>
+          <text class="boom-letter" x="730" y="100">!</text>
+        </g>
+      </svg>
+    </div>
+
+    <div id="ch2-wipe"></div>
+  </div>
+</section>
+
+
+
+
     <section class="section--chapter" id="chapter-3">
     <div class="section__content">
       <div class="panel"> <h2>THE STRUGGLE BEGINS</h2> </div>
@@ -141,3 +178,10 @@
     </div>
   </section>
 </main>
+
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/ScrollTrigger.min.js"></script>
+
+<script src="scripts/main.js" defer></script>
+
+</body>
