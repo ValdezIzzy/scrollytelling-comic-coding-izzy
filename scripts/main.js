@@ -1162,3 +1162,63 @@ tlSplit
   }, 0.96)}
 
 );
+
+
+
+
+// -----------------------------------------------------------------
+// CHAPTER 3 TIMELINE
+// -----------------------------------------------------------------
+document.addEventListener("DOMContentLoaded", () => {
+  const chapter3 = document.querySelector("#chapter-3");
+  if (!chapter3) return;
+
+  const tl3 = gsap.timeline({
+    scrollTrigger: {
+      trigger: "#chapter-3",
+      start: "top top", 
+      end: "+=4500",    
+      pin: true,        
+      scrub: 1          
+    }
+  });
+
+  const tTopPanels = [
+    chapter3.querySelector(".panel:nth-child(1)"),
+    chapter3.querySelector("#caption-panel"),
+    chapter3.querySelector(".panel:nth-child(3)"),
+    chapter3.querySelector(".panel:nth-child(4)")
+  ];
+  
+  const panel5 = chapter3.querySelector("#chapter-3-panel-5");
+  const textReveal = chapter3.querySelector("#text-reveal");
+  const leftHalf = panel5.querySelector(".left-half");
+  const rightHalf = panel5.querySelector(".right-half");
+  const panelContent = panel5.querySelector(".panel-content");
+  const pIcons = chapter3.querySelectorAll(".p-icon");
+  const parallaxIconsContainer = chapter3.querySelector(".parallax-icons");
+
+  gsap.set(tTopPanels, { y: -1200 }); 
+  gsap.set(panel5, { y: 1200 }); 
+  gsap.set(textReveal, { autoAlpha: 0, scale: 0.5 }); 
+
+  tl3.to(tTopPanels, { y: 0, stagger: 0.2, ease: "power2.out", duration: 2 }, "start")
+     .add("pauseText", "+=2")
+     .to(tTopPanels, { y: 1200, stagger: 0.15, ease: "power2.in", duration: 2 }, "exitTopPanels")
+     .to(panel5, { y: -350, ease: "back.out(1.2)", duration: 2 }, "exitTopPanels+=2.5")
+     .add("splitWait", "+=2")
+     .to(panelContent, { autoAlpha: 0, duration: 0.5 }, "splitWait")
+     .to(leftHalf, { x: -600, y: 1000, rotation: -45, duration: 3, ease: "power1.in" }, "splitWait+=0.5")
+     .to(rightHalf, { x: 600, y: 1000, rotation: 45, duration: 3, ease: "power1.in" }, "splitWait+=0.5")
+     .to(textReveal, { autoAlpha: 1, scale: 1, duration: 1.5, ease: "power2.out" }, "splitWait+=1.5")
+     .add("readText", "+=2")
+     .to(textReveal, { scale: 80, ease: "power2.in", duration: 3 }, "scaleUp")
+     .to(chapter3, { backgroundColor: "#ffffff", duration: 1 }, "scaleUp+=2.5")
+     .to(parallaxIconsContainer, { autoAlpha: 0, duration: 0.5 }, "scaleUp+=3"); 
+
+  const totalTl3Duration = tl3.duration();
+  pIcons.forEach((icon, index) => {
+    const distance = 400 + (index * 100) + (Math.random() * 400);
+    tl3.to(icon, { y: distance, rotation: (Math.random() * 360) - 180, ease: "none", duration: totalTl3Duration }, 0); 
+  });
+});
