@@ -89,3 +89,15 @@
   --border-default:var(--neutrals__neutral20);
 
 }
+
+body.theme-dark {
+  --surface-primary: #121417;
+  --surface-secondary: #1c2025;
+  --surface-inverse: #f5f7fb;
+
+  --text-primary: #f5f7fb;
+  --text-secondary: #c3cedd;
+  --text-inverse: #111318;
+
+  --border-default: #4c5767;
+}

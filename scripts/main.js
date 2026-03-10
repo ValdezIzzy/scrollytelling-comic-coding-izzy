@@ -61,6 +61,797 @@ document.addEventListener("DOMContentLoaded", () => {
     }, 0.42);
 });
 
+/* =========================================================
+   CHAPTER 4 — title enters from top on scroll
+   ========================================================= */
+document.addEventListener("DOMContentLoaded", () => {
+  const ch4 = document.querySelector("#chapter-4");
+  const ch5 = document.querySelector("#chapter-5");
+  if (!ch4) return;
+
+  const content = ch4.querySelector(".section__content");
+  const titlePanel = ch4.querySelector(".panel:nth-child(1)");
+  const stairPanel1 = content?.querySelector(".panel:nth-child(2)");
+  const stairPanel2 = content?.querySelector(".panel:nth-child(3)");
+  const stairPanel3 = content?.querySelector(".panel:nth-child(4)");
+  const flipPanel = content?.querySelector(".panel:nth-child(7)");
+  const fullViewPanel = content?.querySelector("#full-view-panel");
+  const finalLine1 = fullViewPanel?.querySelector('[data-type="line-1"]');
+  const finalLine2Prefix = fullViewPanel?.querySelector('[data-type="line-2-prefix"]');
+  const finalLine2Word = fullViewPanel?.querySelector('[data-type="line-2-word"]');
+  const finalFireworks = fullViewPanel?.querySelector(".ch4-fireworks");
+  const finalOutlineLines = fullViewPanel?.querySelectorAll(".ch4-border-line");
+  if (!titlePanel || !stairPanel1 || !stairPanel2 || !stairPanel3) return;
+
+  const setupCh4TitleScrub = () => {
+    const triggerId = "ch4-title-scrub";
+    const existing = ScrollTrigger.getById(triggerId);
+    if (existing) existing.kill();
+
+    const startY = -420;
+    gsap.set(titlePanel, { y: startY, autoAlpha: 0, force3D: true });
+
+    ScrollTrigger.create({
+      id: triggerId,
+      trigger: ch4,
+      start: "top bottom",
+      end: "top 35%",
+      scrub: true,
+      invalidateOnRefresh: true,
+      onUpdate: (self) => {
+        const p = self.progress;
+        gsap.set(titlePanel, {
+          y: startY + ((0 - startY) * p),
+          autoAlpha: p
+        });
+      },
+      onLeaveBack: () => {
+        gsap.set(titlePanel, { y: startY, autoAlpha: 0 });
+      }
+    });
+  };
+
+  const setupCh4StairPanels = () => {
+    const triggerId = "ch4-stair-panels";
+    const existing = ScrollTrigger.getById(triggerId);
+    if (existing) existing.kill();
+
+    const getOffscreenLeftX = (el) => {
+      const rect = el.getBoundingClientRect();
+      return -(rect.left + rect.width + 40);
+    };
+
+    gsap.set(stairPanel1, {
+      x: () => getOffscreenLeftX(stairPanel1),
+      y: -24,
+      autoAlpha: 0,
+      zIndex: 5,
+      force3D: true
+    });
+    gsap.set(stairPanel2, {
+      x: () => getOffscreenLeftX(stairPanel2),
+      y: -32,
+      autoAlpha: 0,
+      zIndex: 6,
+      force3D: true
+    });
+    gsap.set(stairPanel3, {
+      x: () => getOffscreenLeftX(stairPanel3),
+      y: -40,
+      autoAlpha: 0,
+      zIndex: 7,
+      force3D: true
+    });
+
+    const tlStairs = gsap.timeline({
+      scrollTrigger: {
+        id: triggerId,
+        trigger: stairPanel3,
+        start: "bottom bottom",
+        end: () => "+=" + Math.round(window.innerHeight * 1.9),
+        scrub: 1,
+        pin: ch4,
+        pinSpacing: true,
+        anticipatePin: 1,
+        invalidateOnRefresh: true
+      }
+    });
+
+    tlStairs
+      .to(stairPanel1, {
+        x: 0,
+        y: 14,
+        autoAlpha: 1,
+        duration: 0.34,
+        ease: "none"
+      }, 0.00)
+      .to(stairPanel1, {
+        y: -6,
+        duration: 0.22,
+        ease: "none"
+      }, 0.34)
+      .to(stairPanel1, {
+        y: 0,
+        duration: 0.20,
+        ease: "none"
+      }, 0.56)
+
+      .to(stairPanel2, {
+        x: 0,
+        y: 16,
+        autoAlpha: 1,
+        duration: 0.34,
+        ease: "none"
+      }, 0.80)
+      .to(stairPanel2, {
+        y: -7,
+        duration: 0.22,
+        ease: "none"
+      }, 1.14)
+      .to(stairPanel2, {
+        y: 0,
+        duration: 0.20,
+        ease: "none"
+      }, 1.36)
+
+      .to(stairPanel3, {
+        x: 0,
+        y: 18,
+        autoAlpha: 1,
+        duration: 0.34,
+        ease: "none"
+      }, 1.60)
+      .to(stairPanel3, {
+        y: -8,
+        duration: 0.22,
+        ease: "none"
+      }, 1.94)
+      .to(stairPanel3, {
+        y: 0,
+        duration: 0.20,
+        ease: "none"
+      }, 2.16);
+  };
+
+  const setupCh4FlipPanel = () => {
+    if (!flipPanel) return;
+
+    const triggerId = "ch4-flip-panel";
+    const existing = ScrollTrigger.getById(triggerId);
+    if (existing) existing.kill();
+
+    const getFlipPanelOffLeftX = () => {
+      const rect = flipPanel.getBoundingClientRect();
+      return -(window.innerWidth + rect.width + 24);
+    };
+
+    const getFlipPanelOffRightX = () => {
+      const rect = flipPanel.getBoundingClientRect();
+      return window.innerWidth + rect.width + 24;
+    };
+
+    const getFlipStart = () => {
+      const stairTrigger = ScrollTrigger.getById("ch4-stair-panels");
+      const stairEnd = Number(stairTrigger?.end);
+      if (Number.isFinite(stairEnd)) {
+        return stairEnd + Math.round(window.innerHeight * 0.06);
+      }
+      return Math.max(0, ScrollTrigger.maxScroll(window) * 0.45);
+    };
+
+    const getFlipEnd = () => {
+      return getFlipStart() + Math.round(window.innerHeight * 1.35);
+    };
+
+    gsap.set(flipPanel, {
+      transformPerspective: 1200,
+      transformOrigin: "0% 50%",
+      rotateY: -180,
+      x: () => getFlipPanelOffLeftX(),
+      y: 0,
+      autoAlpha: 0,
+      zIndex: 9
+    });
+
+    const tlFlip = gsap.timeline({
+      scrollTrigger: {
+        id: triggerId,
+        trigger: ch4,
+        start: () => getFlipStart(),
+        end: () => getFlipEnd(),
+        scrub: 1,
+        invalidateOnRefresh: true
+      }
+    });
+
+    tlFlip
+      .set(flipPanel, {
+        transformOrigin: "0% 50%"
+      }, 0)
+      .to(flipPanel, {
+        rotateY: 0,
+        x: 0,
+        y: 0,
+        autoAlpha: 1,
+        duration: 0.44,
+        ease: "none"
+      }, 0.02)
+      .to(flipPanel, {
+        rotateY: 0,
+        x: 0,
+        y: 0,
+        autoAlpha: 1,
+        duration: 0.38,
+        ease: "none"
+      }, 0.50)
+      .set(flipPanel, {
+        transformOrigin: "100% 50%"
+      }, 0.90)
+      .to(flipPanel, {
+        rotateY: 180,
+        x: () => getFlipPanelOffRightX(),
+        y: 0,
+        autoAlpha: 0,
+        duration: 0.34,
+        ease: "none"
+      }, 0.92);
+  };
+
+  const addTypewriterTween = (timeline, target, duration, at) => {
+    const fullText = target.dataset.fullText || target.textContent || "";
+    target.dataset.fullText = fullText;
+
+    const state = { chars: 0 };
+
+    timeline.to(state, {
+      chars: fullText.length,
+      duration,
+      ease: "none",
+      onStart: () => {
+        target.textContent = "";
+      },
+      onUpdate: () => {
+        target.textContent = fullText.slice(0, Math.floor(state.chars));
+      },
+      onComplete: () => {
+        target.textContent = fullText;
+      },
+      onReverseComplete: () => {
+        target.textContent = "";
+      }
+    }, at);
+  };
+
+  const buildFinalFireworkSparks = () => {
+    if (!finalFireworks) return { allSparks: [], waves: [] };
+
+    finalFireworks.innerHTML = "";
+
+    const palette = [
+      "var(--accent-primary)",
+      "var(--accent-secondary)",
+      "var(--accent-highlight)",
+      "var(--red__red50)",
+      "var(--red__red70)",
+      "var(--yellow__yellow40)",
+      "var(--yellow__yellow60)",
+      "var(--blue__blue40)",
+      "var(--blue__blue60)"
+    ];
+
+    const waveCount = 8;
+    const burstsPerWave = 4;
+    const bottomLeftBurstsPerWave = 1;
+    const sparksPerBurst = 20;
+    const waves = [];
+    const allSparks = [];
+
+    for (let wave = 0; wave < waveCount; wave += 1) {
+      const waveSparks = [];
+
+      for (let burst = 0; burst < burstsPerWave; burst += 1) {
+        const center = {
+          x: gsap.utils.random(8, 92),
+          y: gsap.utils.random(10, 90)
+        };
+
+        for (let i = 0; i < sparksPerBurst; i += 1) {
+          const spark = document.createElement("span");
+          spark.className = "ch4-firework-spark";
+          spark.style.left = `${center.x}%`;
+          spark.style.top = `${center.y}%`;
+          spark.style.backgroundColor = palette[(wave * burstsPerWave * sparksPerBurst + burst * sparksPerBurst + i) % palette.length];
+
+          const angle = gsap.utils.random(0, Math.PI * 2);
+          const radius = gsap.utils.random(48, 220);
+          spark.dataset.tx = String(Math.cos(angle) * radius);
+          spark.dataset.ty = String(Math.sin(angle) * radius);
+          spark.dataset.rot = String(gsap.utils.random(-360, 360));
+          spark.dataset.endScale = String(gsap.utils.random(0.12, 0.5));
+          spark.dataset.wave = String(wave);
+
+          finalFireworks.appendChild(spark);
+          waveSparks.push(spark);
+          allSparks.push(spark);
+        }
+      }
+
+      // Add a few dedicated bursts in the bottom-left quadrant.
+      for (let burst = 0; burst < bottomLeftBurstsPerWave; burst += 1) {
+        const center = {
+          x: gsap.utils.random(8, 24),
+          y: gsap.utils.random(72, 92)
+        };
+
+        for (let i = 0; i < sparksPerBurst; i += 1) {
+          const spark = document.createElement("span");
+          spark.className = "ch4-firework-spark";
+          spark.style.left = `${center.x}%`;
+          spark.style.top = `${center.y}%`;
+          spark.style.backgroundColor = palette[(wave * (burstsPerWave + bottomLeftBurstsPerWave) * sparksPerBurst + burstsPerWave * sparksPerBurst + i) % palette.length];
+
+          const angle = gsap.utils.random(0, Math.PI * 2);
+          const radius = gsap.utils.random(52, 220);
+          spark.dataset.tx = String(Math.cos(angle) * radius);
+          spark.dataset.ty = String(Math.sin(angle) * radius);
+          spark.dataset.rot = String(gsap.utils.random(-360, 360));
+          spark.dataset.endScale = String(gsap.utils.random(0.12, 0.5));
+          spark.dataset.wave = String(wave);
+
+          finalFireworks.appendChild(spark);
+          waveSparks.push(spark);
+          allSparks.push(spark);
+        }
+      }
+
+      waves.push(waveSparks);
+    }
+
+    return { allSparks, waves };
+  };
+
+  const setupCh4FinalPanel = () => {
+    if (
+      !fullViewPanel ||
+      !finalLine1 ||
+      !finalLine2Prefix ||
+      !finalLine2Word ||
+      !finalFireworks ||
+      !finalOutlineLines ||
+      finalOutlineLines.length !== 4
+    ) return;
+
+    const triggerId = "ch4-final-panel";
+    const existing = ScrollTrigger.getById(triggerId);
+    if (existing) existing.kill();
+
+    // Render fireworks at chapter level so bursts happen outside the panel bounds.
+    if (finalFireworks.parentElement !== ch4) {
+      ch4.appendChild(finalFireworks);
+    }
+
+    const { allSparks, waves } = buildFinalFireworkSparks();
+
+    const [lineTop, lineRight, lineBottom, lineLeft] = finalOutlineLines;
+
+    const getFullPanelCenterStart = () => {
+      const rect = fullViewPanel.getBoundingClientRect();
+      const scrollTop = window.pageYOffset || document.documentElement.scrollTop || 0;
+      return Math.max(0, scrollTop + rect.top + (rect.height * 0.5) - (window.innerHeight * 0.5));
+    };
+
+    const getFinalStart = () => {
+      const flipTrigger = ScrollTrigger.getById("ch4-flip-panel");
+      const flipEnd = Number(flipTrigger?.end);
+      const centerStart = getFullPanelCenterStart();
+      if (Number.isFinite(flipEnd)) {
+        return Math.max(centerStart, flipEnd + Math.round(window.innerHeight * 0.04));
+      }
+      return centerStart;
+    };
+
+    const getFinalEnd = () => {
+      return getFinalStart() + Math.round(window.innerHeight * 2.05);
+    };
+
+    const resetFinalPanelVisuals = () => {
+      gsap.set(fullViewPanel, {
+        autoAlpha: 0,
+        y: 0,
+        scale: 1,
+        zIndex: 80,
+        transformOrigin: "50% 50%"
+      });
+
+      gsap.set([lineTop, lineBottom], {
+        scaleX: 0,
+        transformOrigin: "0% 50%",
+        autoAlpha: 1
+      });
+
+      gsap.set([lineRight, lineLeft], {
+        scaleY: 0,
+        transformOrigin: "50% 0%",
+        autoAlpha: 1
+      });
+
+      gsap.set(finalLine2Word, {
+        scale: 1,
+        transformOrigin: "50% 70%"
+      });
+
+      gsap.set(finalFireworks, {
+        autoAlpha: 0
+      });
+
+      gsap.set(allSparks, {
+        x: 0,
+        y: 0,
+        rotation: 0,
+        autoAlpha: 0,
+        scale: 0.06
+      });
+    };
+
+    const resetFinalPanelText = () => {
+      [finalLine1, finalLine2Prefix, finalLine2Word].forEach((line) => {
+        line.textContent = "";
+      });
+    };
+
+    resetFinalPanelVisuals();
+    resetFinalPanelText();
+
+    const tlFinal = gsap.timeline({
+      scrollTrigger: {
+        id: triggerId,
+        trigger: ch4,
+        start: () => getFinalStart(),
+        end: () => getFinalEnd(),
+        scrub: 1,
+        pin: ch4,
+        pinSpacing: true,
+        anticipatePin: 1,
+        invalidateOnRefresh: true,
+        onRefreshInit: () => {
+          resetFinalPanelVisuals();
+          resetFinalPanelText();
+        }
+      }
+    });
+
+    tlFinal
+      .to(fullViewPanel, {
+        autoAlpha: 1,
+        y: 0,
+        scale: 1,
+        duration: 0.04,
+        ease: "none"
+      }, 0.00)
+      .to(ch4, {
+        backgroundColor: () => (ch5 ? getComputedStyle(ch5).backgroundColor : "rgb(82, 82, 82)"),
+        duration: 3.2,
+        ease: "none"
+      }, 0.48)
+      .to(lineTop, {
+        scaleX: 1,
+        duration: 0.12,
+        ease: "none"
+      }, 0.02)
+      .to(lineRight, {
+        scaleY: 1,
+        duration: 0.10,
+        ease: "none"
+      }, 0.14)
+      .to(lineBottom, {
+        scaleX: 1,
+        duration: 0.12,
+        ease: "none"
+      }, 0.24)
+      .to(lineLeft, {
+        scaleY: 1,
+        duration: 0.10,
+        ease: "none"
+      }, 0.36);
+
+    const fireworksStart = 1.20;
+    const fireworksWaveGap = 0.55;
+    const fireworksTravelDuration = 0.44;
+
+    tlFinal.to(finalFireworks, {
+      autoAlpha: 1,
+      duration: 0.02,
+      ease: "none"
+    }, fireworksStart);
+
+    waves.forEach((waveSparks, waveIndex) => {
+      const waveStart = fireworksStart + (waveIndex * fireworksWaveGap);
+
+      tlFinal
+        .set(waveSparks, {
+          x: 0,
+          y: 0,
+          rotation: 0,
+          scale: 0.06,
+          autoAlpha: 0
+        }, waveStart - 0.02)
+        .to(waveSparks, {
+          autoAlpha: 0.95,
+          scale: 1,
+          duration: 0.08,
+          stagger: {
+            each: 0.0018,
+            from: "random"
+          },
+          ease: "none"
+        }, waveStart)
+        .to(waveSparks, {
+          x: (index, spark) => Number(spark.dataset.tx || 0),
+          y: (index, spark) => Number(spark.dataset.ty || 0),
+          rotation: (index, spark) => Number(spark.dataset.rot || 0),
+          scale: (index, spark) => Number(spark.dataset.endScale || 0.2),
+          autoAlpha: 0,
+          duration: fireworksTravelDuration,
+          stagger: {
+            each: 0.0018,
+            from: "random"
+          },
+          ease: "none"
+        }, waveStart + 0.08);
+    });
+
+    // Pulse "everything" while fireworks explode.
+    waves.forEach((_, waveIndex) => {
+      const pulseStart = fireworksStart + (waveIndex * fireworksWaveGap);
+
+      tlFinal
+        .to(finalLine2Word, {
+          scale: 1.24,
+          duration: 0.12,
+          ease: "none"
+        }, pulseStart)
+        .to(finalLine2Word, {
+          scale: 0.92,
+          duration: 0.12,
+          ease: "none"
+        }, pulseStart + 0.12)
+        .to(finalLine2Word, {
+          scale: 1,
+          duration: 0.14,
+          ease: "none"
+        }, pulseStart + 0.24);
+    });
+
+    const fireworksEnd = fireworksStart + ((waves.length - 1) * fireworksWaveGap) + fireworksTravelDuration + 0.14;
+    tlFinal.to(finalFireworks, {
+      autoAlpha: 0,
+      duration: 0.08,
+      ease: "none"
+    }, fireworksEnd);
+
+    addTypewriterTween(tlFinal, finalLine1, 0.34, 0.24);
+    addTypewriterTween(tlFinal, finalLine2Prefix, 0.24, 0.60);
+    addTypewriterTween(tlFinal, finalLine2Word, 0.22, 0.84);
+  };
+
+  const lightPortal = ch4.querySelector('.character-portal[data-portal="light"]');
+  const darkPortal = ch4.querySelector('.character-portal[data-portal="dark"]');
+
+  const getPortalParts = (portal) => {
+    if (!portal) return null;
+    return {
+      root: portal,
+      button: portal.querySelector(".portal-button"),
+      figure: portal.querySelector(".stick-figure"),
+      hole: portal.querySelector(".portal-hole")
+    };
+  };
+
+  const portalParts = {
+    light: getPortalParts(lightPortal),
+    dark: getPortalParts(darkPortal)
+  };
+
+  const hasPortalParts =
+    portalParts.light &&
+    portalParts.dark &&
+    portalParts.light.button &&
+    portalParts.dark.button &&
+    portalParts.light.figure &&
+    portalParts.dark.figure &&
+    portalParts.light.hole &&
+    portalParts.dark.hole;
+
+  const themeKey = "comic-site-theme";
+
+  const setTheme = (theme) => {
+    const isDark = theme === "dark";
+    document.body.classList.toggle("theme-dark", isDark);
+    try {
+      localStorage.setItem(themeKey, isDark ? "dark" : "light");
+    } catch (_err) {
+      // Ignore storage failures.
+    }
+  };
+
+  const getSavedTheme = () => {
+    try {
+      return localStorage.getItem(themeKey);
+    } catch (_err) {
+      return null;
+    }
+  };
+
+  const setPortalRestState = (parts, active) => {
+    parts.root.classList.toggle("is-active", active);
+    parts.root.classList.toggle("is-inactive", !active);
+    parts.button.disabled = !active;
+
+    gsap.set(parts.hole, {
+      autoAlpha: 0,
+      scaleX: 0.74,
+      scaleY: 0.68
+    });
+
+    gsap.set(parts.figure, {
+      autoAlpha: active ? 1 : 0,
+      y: active ? 0 : 92,
+      scaleX: active ? 1 : 1.08,
+      scaleY: active ? 1 : 0.82,
+      transformOrigin: "50% 100%"
+    });
+  };
+
+  if (hasPortalParts) {
+    let activePortal = getSavedTheme() === "dark" ? "dark" : "light";
+    let isSwapping = false;
+
+    const syncPortalStates = () => {
+      setPortalRestState(portalParts.light, activePortal === "light");
+      setPortalRestState(portalParts.dark, activePortal === "dark");
+      setTheme(activePortal === "dark" ? "dark" : "light");
+    };
+
+    const runPortalSwap = () => {
+      if (isSwapping) return;
+
+      isSwapping = true;
+      const fromName = activePortal;
+      const toName = fromName === "light" ? "dark" : "light";
+      const from = portalParts[fromName];
+      const to = portalParts[toName];
+
+      from.button.disabled = true;
+      to.button.disabled = true;
+
+      const tlSwap = gsap.timeline({
+        defaults: { ease: "power2.inOut" },
+        onComplete: () => {
+          activePortal = toName;
+          syncPortalStates();
+          isSwapping = false;
+        }
+      });
+
+      tlSwap
+        .set(to.figure, {
+          autoAlpha: 0,
+          y: 26,
+          scaleX: 0.46,
+          scaleY: 0.1,
+          transformOrigin: "50% 100%"
+        })
+        .set(to.hole, { autoAlpha: 0, scaleX: 0.74, scaleY: 0.68 })
+
+        // active character squashes before jumping
+        .to(from.figure, {
+          y: 12,
+          scaleX: 1.12,
+          scaleY: 0.86,
+          duration: 0.12
+        }, 0)
+        .to(from.hole, {
+          autoAlpha: 0.95,
+          scaleX: 1.1,
+          scaleY: 1.18,
+          duration: 0.12
+        }, 0)
+
+        // launch and fall into hole
+        .to(from.figure, {
+          y: -62,
+          scaleX: 0.88,
+          scaleY: 1.14,
+          duration: 0.24,
+          ease: "power2.out"
+        }, 0.12)
+        .to(from.figure, {
+          y: 22,
+          scaleX: 0.4,
+          scaleY: 0.06,
+          autoAlpha: 1,
+          duration: 0.28,
+          ease: "power2.in"
+        }, 0.36)
+        .to(from.hole, {
+          scaleX: 1.26,
+          scaleY: 1.34,
+          autoAlpha: 1,
+          duration: 0.24
+        }, 0.36)
+        .to(from.hole, {
+          autoAlpha: 0,
+          scaleX: 0.74,
+          scaleY: 0.68,
+          duration: 0.18
+        }, 0.52)
+        .set(from.figure, {
+          autoAlpha: 0,
+          y: 92,
+          scaleX: 1.08,
+          scaleY: 0.82
+        }, 0.64)
+
+        // other character jumps out and lands with squash/stretch
+        .to(to.figure, {
+          y: -56,
+          autoAlpha: 1,
+          scaleX: 0.9,
+          scaleY: 1.13,
+          duration: 0.26,
+          ease: "power2.out"
+        }, 0.56)
+        .to(to.figure, {
+          y: 8,
+          scaleX: 1.12,
+          scaleY: 0.86,
+          duration: 0.18,
+          ease: "power2.in"
+        }, 0.82)
+        .to(to.figure, {
+          y: -10,
+          scaleX: 0.97,
+          scaleY: 1.06,
+          duration: 0.14,
+          ease: "power1.out"
+        }, 1.00)
+        .to(to.figure, {
+          y: 0,
+          scaleX: 1,
+          scaleY: 1,
+          duration: 0.16,
+          ease: "power1.out"
+        }, 1.14)
+
+        // theme changes when destination character lands
+        .add(() => {
+          setTheme(toName === "dark" ? "dark" : "light");
+        }, 1.14);
+    };
+
+    syncPortalStates();
+    portalParts.light.button.addEventListener("click", () => {
+      if (activePortal !== "light") return;
+      runPortalSwap();
+    });
+    portalParts.dark.button.addEventListener("click", () => {
+      if (activePortal !== "dark") return;
+      runPortalSwap();
+    });
+  }
+
+  // Defer creation until other chapter triggers (including pinned ones) are registered.
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      setupCh4TitleScrub();
+      setupCh4StairPanels();
+      setupCh4FlipPanel();
+      setupCh4FinalPanel();
+      ScrollTrigger.refresh();
+    });
+  });
+});
+
 
 
 /* =========================================================
@@ -789,8 +1580,21 @@ document.addEventListener("DOMContentLoaded", () => {
   const rightPanel = content.querySelector(".panel:nth-child(4)");
   const questionsPanel = content.querySelector(".panel:nth-child(5)");
   const revealText = content.querySelector("#text-reveal");
+  const splitLeftHalf = questionsPanel?.querySelector(".left-half");
+  const splitRightHalf = questionsPanel?.querySelector(".right-half");
+  const panelContent = questionsPanel?.querySelector(".panel-content");
 
-  if (!titlePanel || !captionPanel || !middlePanel || !rightPanel || !questionsPanel || !revealText) {
+  if (
+    !titlePanel ||
+    !captionPanel ||
+    !middlePanel ||
+    !rightPanel ||
+    !questionsPanel ||
+    !revealText ||
+    !splitLeftHalf ||
+    !splitRightHalf ||
+    !panelContent
+  ) {
     console.log("Chapter 3 elements not found correctly");
     return;
   }
@@ -821,7 +1625,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   iconLayer.innerHTML = "";
 
-  const iconCount = 18;
+  const iconCount = 40;
   for (let i = 0; i < iconCount; i++) {
     const iconWrap = document.createElement("div");
     iconWrap.className = "ch3-float-icon";
@@ -840,11 +1644,16 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   const floatingIcons = iconLayer.querySelectorAll(".ch3-float-icon");
+  const staticParallaxIcons = ch3.querySelectorAll(".p-icon");
 
   if (prefersReducedMotion) {
-    gsap.set([titlePanel, captionPanel, middlePanel, rightPanel, questionsPanel, revealText], {
+    gsap.set(
+      [titlePanel, captionPanel, middlePanel, rightPanel, questionsPanel, revealText, panelContent, splitLeftHalf, splitRightHalf],
+      {
       clearProps: "all"
-    });
+      }
+    );
+    gsap.set(staticParallaxIcons, { clearProps: "all" });
     gsap.set(floatingIcons, { autoAlpha: 0.14 });
     return;
   }
@@ -868,27 +1677,69 @@ document.addEventListener("DOMContentLoaded", () => {
   gsap.set(rightPanel, { rotation: 24 });
 
   gsap.set(questionsPanel, {
-    y: 180,
+    y: 220,
     autoAlpha: 0
+  });
+
+  gsap.set(panelContent, {
+    autoAlpha: 1
+  });
+
+  gsap.set([splitLeftHalf, splitRightHalf], {
+    x: 0,
+    y: 0,
+    rotation: 0,
+    autoAlpha: 1
   });
 
   gsap.set(revealText, {
-    y: 120,
+    y: 0,
+    xPercent: -50,
+    yPercent: -50,
+    left: "50%",
+    top: "42%",
+    width: "min(86vw, 960px)",
+    position: "fixed",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 7,
     rotation: 0,
-    autoAlpha: 0
+    autoAlpha: 0,
+    scale: 0.32,
+    transformOrigin: "50% 50%"
   });
 
-  floatingIcons.forEach((icon, index) => {
+  floatingIcons.forEach((icon) => {
+    const leftPct = Math.random() * 92;
+    const topPct = Math.random() * 90;
     gsap.set(icon, {
-      left: `${8 + (index % 5) * 18}%`,
-      top: `${10 + Math.floor(index / 5) * 22}%`,
-      xPercent: -50,
-      yPercent: -50,
-      autoAlpha: gsap.utils.random(0.12, 0.24),
-      rotation: gsap.utils.random(-28, 28),
-      scale: gsap.utils.random(0.7, 1.2)
+      left: `${leftPct}%`,
+      top: `${topPct}%`,
+      xPercent: 0,
+      yPercent: 0,
+      autoAlpha: gsap.utils.random(0.1, 0.26),
+      rotation: gsap.utils.random(-40, 40),
+      scale: gsap.utils.random(0.55, 1.35)
     });
   });
+
+  staticParallaxIcons.forEach((icon) => {
+    const leftPct = Math.random() * 90;
+    const topPct = Math.random() * 86;
+    gsap.set(icon, {
+      left: `${leftPct}%`,
+      top: `${topPct}%`,
+      autoAlpha: gsap.utils.random(0.09, 0.2),
+      rotation: gsap.utils.random(-35, 35),
+      scale: gsap.utils.random(0.65, 1.4)
+    });
+  });
+
+  const getQuestionsPanelCenterDeltaY = () => {
+    const rect = questionsPanel.getBoundingClientRect();
+    return (window.innerHeight * 0.5) - (rect.top + rect.height * 0.5);
+  };
 
 /* -------------------------
    Stage 1 — pinned freefall
@@ -899,7 +1750,7 @@ const tlFall = gsap.timeline({
   scrollTrigger: {
     trigger: ch3,
     start: "top top",
-    end: () => "+=" + Math.round(window.innerHeight * 1.7),
+    end: () => "+=" + Math.round(window.innerHeight * 2.6),
     scrub: 1,
     pin: true,
     pinSpacing: true,
@@ -1000,225 +1851,126 @@ tlFall
     ease: "none"
   }, 0.70)
 
+  // hard reset split panel state before it enters (prevents carry-over/hide states)
+  .set(questionsPanel, {
+    y: 220,
+    autoAlpha: 0
+  }, 0.88)
+  .set(panelContent, {
+    autoAlpha: 1
+  }, 0.88)
+  .set([splitLeftHalf, splitRightHalf], {
+    x: 0,
+    y: 0,
+    rotation: 0,
+    autoAlpha: 1
+  }, 0.88)
+
   // only now does the bottom panel come up
 .to(questionsPanel, {
-  y: -340,
+  y: () => `+=${getQuestionsPanelCenterDeltaY()}`,
   autoAlpha: 1,
-  duration: 0.22,
+  duration: 0.28,
   ease: "none"
-}, 0.92);
+}, 0.92)
 
-// icon parallax / drowning effect
-floatingIcons.forEach((icon) => {
-  tlFall.to(icon, {
-    y: gsap.utils.random(220, 520),
-    x: gsap.utils.random(-80, 80),
-    rotation: `+=${gsap.utils.random(-90, 90)}`,
-    autoAlpha: gsap.utils.random(0.08, 0.22),
-    duration: 1,
-    ease: "none"
-  }, 0);
-});
-
-/* -------------------------
-   Stage 2 — delayed split reveal for bottom panel
-   starts only when the bottom panel is actually in view
-   ------------------------- */
-let splitRoot = questionsPanel.querySelector(".ch3-splitter");
-
-if (!splitRoot) {
-  splitRoot = document.createElement("div");
-  splitRoot.className = "ch3-splitter";
-  splitRoot.innerHTML = `
-    <div class="ch3-split-half ch3-split-left"></div>
-    <div class="ch3-split-half ch3-split-right"></div>
-  `;
-  questionsPanel.appendChild(splitRoot);
-}
-
-const splitLeft = splitRoot.querySelector(".ch3-split-left");
-const splitRight = splitRoot.querySelector(".ch3-split-right");
-
-// text INSIDE the breaking panel
-const questionsText = questionsPanel.querySelectorAll("h4, h5, p");
-
-// clean starting states
-gsap.set(splitRoot, { autoAlpha: 0 });
-gsap.set([splitLeft, splitRight], {
-  xPercent: 0,
-  autoAlpha: 1
-});
-
-gsap.set(revealText, {
-  autoAlpha: 0,
-  scale: 0.18,
-  rotation: 0,
-  transformOrigin: "50% 50%"
-});
-
-gsap.set(questionsPanel, {
-  autoAlpha: 1,
-  clearProps: "backgroundColor,borderColor"
-});
-
-const tlSplit = gsap.timeline({
-  scrollTrigger: {
-  trigger: ch3,
-  start: () => tlFall.scrollTrigger.end,
-  end: () => tlFall.scrollTrigger.end + window.innerHeight * 1.8,
-  scrub: 1,
-  pin: questionsPanel,
-  pinSpacing: true,
-  invalidateOnRefresh: true,
-  anticipatePin: 1
-  // markers: true
-}
-});
-
-tlSplit
-  // reset position first
-  .set(questionsPanel, {
-    y: 0,
-    autoAlpha: 1
-  }, 0)
-  
-  // hold the full panel visibly on screen
+  // hold panel for readability
   .to(questionsPanel, {
     autoAlpha: 1,
-    y: 0,
-    duration: 0.16,
+    duration: 0.24,
     ease: "none"
-  }, 0)
+  }, 1.10)
 
-  // fake split face appears
-  .to(splitRoot, {
+  // panel text vanishes first
+  .to(panelContent, {
+    autoAlpha: 0,
+    duration: 0.14,
+    ease: "none"
+  }, 1.24)
+
+  // split and fall
+  .to(splitLeftHalf, {
+    x: () => -(window.innerWidth * 0.8),
+    y: () => window.innerHeight * 1.25,
+    rotation: -46,
     autoAlpha: 1,
-    duration: 0.08,
+    duration: 0.44,
     ease: "none"
-  }, 0.30)
+  }, 1.30)
+  .to(splitRightHalf, {
+    x: () => window.innerWidth * 0.8,
+    y: () => window.innerHeight * 1.25,
+    rotation: 46,
+    autoAlpha: 1,
+    duration: 0.44,
+    ease: "none"
+  }, 1.30)
 
-  // original panel text disappears BEFORE split opens
-  .to(questionsText, {
+  // lock reveal text to exact viewport center before showing
+  .set(revealText, {
+    left: "50%",
+    top: "42%",
+    xPercent: -50,
+    yPercent: -50,
+    y: 0
+  }, 1.27)
+
+  // reveal final text behind split panel
+  .fromTo(revealText, {
     autoAlpha: 0,
-    duration: 0.10,
-    ease: "none"
-  }, 0.32)
-
-  // original face fades away
-  .to(questionsPanel, {
-    autoAlpha: 0,
-    duration: 0.08,
-    ease: "none"
-  }, 0.36)
-
-  // split opens
-  .to(splitLeft, {
-    xPercent: -135,
-    duration: 0.24,
-    ease: "none"
-  }, 0.46)
-
-  .to(splitRight, {
-    xPercent: 135,
-    duration: 0.24,
-    ease: "none"
-  }, 0.46)
-
-  // hidden text scales in
-  .to(revealText, {
+    scale: 0.45
+  }, {
     autoAlpha: 1,
     scale: 1,
-    duration: 0.22,
+    duration: 0.28,
     ease: "none"
-  }, 0.58)
+  }, 1.28)
 
-  // hidden text grows huge
+  // zoom text into white transition
   .to(revealText, {
-    scale: 4.8,
+    scale: 4.9,
     autoAlpha: 1,
-    duration: 0.24,
+    duration: 0.38,
     ease: "none"
-  }, 0.74)
-
-  // background returns to white AFTER the text is clearly visible
+  }, 1.68)
+  .to([splitLeftHalf, splitRightHalf], {
+    autoAlpha: 0,
+    duration: 0.14,
+    ease: "none"
+  }, 1.78)
   .to(ch3, {
     backgroundColor: "var(--surface-primary)",
-    duration: 0.22,
+    duration: 0.30,
     ease: "none"
-  }, 0.80)
-
-  // split face fades away
-  .to(splitRoot, {
+  }, 1.82)
+  .set([floatingIcons, staticParallaxIcons], {
     autoAlpha: 0,
-    duration: 0.10,
-    ease: "none"
-  }, 0.84)
-
-  // huge text dissolves
-  .to(revealText, {
+  }, 1.98)
+  .set(revealText, {
     autoAlpha: 0,
-    duration: 0.12,
-    ease: "none"
-  }, 0.96)}
+  }, 2.22);
 
-);
-
-
-
-
-// -----------------------------------------------------------------
-// CHAPTER 3 TIMELINE
-// -----------------------------------------------------------------
-document.addEventListener("DOMContentLoaded", () => {
-  const chapter3 = document.querySelector("#chapter-3");
-  if (!chapter3) return;
-
-  const tl3 = gsap.timeline({
-    scrollTrigger: {
-      trigger: "#chapter-3",
-      start: "top top", 
-      end: "+=4500",    
-      pin: true,        
-      scrub: 1          
-    }
+  // Keep icon motion tied to the same pinned timeline to prevent scroll-jump conflicts.
+  floatingIcons.forEach((icon) => {
+    tlFall.to(icon, {
+      y: gsap.utils.random(260, 760),
+      x: gsap.utils.random(-160, 160),
+      rotation: `+=${gsap.utils.random(-140, 140)}`,
+      autoAlpha: gsap.utils.random(0.08, 0.24),
+      duration: 1,
+      ease: "none"
+    }, 0);
   });
 
-  const tTopPanels = [
-    chapter3.querySelector(".panel:nth-child(1)"),
-    chapter3.querySelector("#caption-panel"),
-    chapter3.querySelector(".panel:nth-child(3)"),
-    chapter3.querySelector(".panel:nth-child(4)")
-  ];
-  
-  const panel5 = chapter3.querySelector("#chapter-3-panel-5");
-  const textReveal = chapter3.querySelector("#text-reveal");
-  const leftHalf = panel5.querySelector(".left-half");
-  const rightHalf = panel5.querySelector(".right-half");
-  const panelContent = panel5.querySelector(".panel-content");
-  const pIcons = chapter3.querySelectorAll(".p-icon");
-  const parallaxIconsContainer = chapter3.querySelector(".parallax-icons");
-
-  gsap.set(tTopPanels, { y: -1200 }); 
-  gsap.set(panel5, { y: 1200 }); 
-  gsap.set(textReveal, { autoAlpha: 0, scale: 0.5 }); 
-
-  tl3.to(tTopPanels, { y: 0, stagger: 0.2, ease: "power2.out", duration: 2 }, "start")
-     .add("pauseText", "+=2")
-     .to(tTopPanels, { y: 1200, stagger: 0.15, ease: "power2.in", duration: 2 }, "exitTopPanels")
-     .to(panel5, { y: -350, ease: "back.out(1.2)", duration: 2 }, "exitTopPanels+=2.5")
-     .add("splitWait", "+=2")
-     .to(panelContent, { autoAlpha: 0, duration: 0.5 }, "splitWait")
-     .to(leftHalf, { x: -600, y: 1000, rotation: -45, duration: 3, ease: "power1.in" }, "splitWait+=0.5")
-     .to(rightHalf, { x: 600, y: 1000, rotation: 45, duration: 3, ease: "power1.in" }, "splitWait+=0.5")
-     .to(textReveal, { autoAlpha: 1, scale: 1, duration: 1.5, ease: "power2.out" }, "splitWait+=1.5")
-     .add("readText", "+=2")
-     .to(textReveal, { scale: 80, ease: "power2.in", duration: 3 }, "scaleUp")
-     .to(chapter3, { backgroundColor: "#ffffff", duration: 1 }, "scaleUp+=2.5")
-     .to(parallaxIconsContainer, { autoAlpha: 0, duration: 0.5 }, "scaleUp+=3"); 
-
-  const totalTl3Duration = tl3.duration();
-  pIcons.forEach((icon, index) => {
-    const distance = 400 + (index * 100) + (Math.random() * 400);
-    tl3.to(icon, { y: distance, rotation: (Math.random() * 360) - 180, ease: "none", duration: totalTl3Duration }, 0); 
+  staticParallaxIcons.forEach((icon) => {
+    tlFall.to(icon, {
+      y: gsap.utils.random(320, 900),
+      x: gsap.utils.random(-180, 180),
+      rotation: `+=${gsap.utils.random(-170, 170)}`,
+      autoAlpha: gsap.utils.random(0.08, 0.22),
+      duration: 1,
+      ease: "none"
+    }, 0);
   });
+
 });

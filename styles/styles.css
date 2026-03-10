@@ -348,7 +348,7 @@ main {
 
 #chapter-3 {
   background: var(--neutrals__neutral80);
-  padding: var(--space-32) 0;
+  padding: 0;
   position: relative; /* For absolutely positioned parallax icons */
   overflow: hidden;   /* Keep icons inside chapter */
 }
@@ -608,7 +608,7 @@ main {
 }
 
 #chapter-3 .panel:nth-child(5){
-  overflow: hidden;
+  overflow: visible;
   position: relative;
   isolation: isolate;
   z-index: 4;
@@ -674,6 +674,7 @@ main {
 
 #chapter-4 {
   background: var(--surface-primary);
+  position: relative;
 }
 
 #chapter-4 .section__content {
@@ -688,8 +689,8 @@ main {
     clamp(150px, 18vw, 210px)
     clamp(150px, 18vw, 210px)
     clamp(190px, 22vw, 260px)
-    clamp(90px, 10vw, 130px)
-    clamp(260px, 34vw, 420px);
+    clamp(190px, 22vw, 260px)
+    minmax(120vh, 120vh);
 }
 
 #chapter-4 .panel:nth-child(1) {
@@ -742,7 +743,10 @@ main {
 #chapter-4 .panel:nth-child(7) {
   grid-column: 3 / 11;
   grid-row: 5;
-  margin-top: var(--space-96);
+  align-self: center;
+  min-height: clamp(170px, 19vw, 230px);
+  margin-top: var(--space-64);
+  margin-bottom: var(--space-64);
 }
 
 #chapter-4 .panel:nth-child(7):hover {
@@ -753,19 +757,127 @@ main {
 #chapter-4 #full-view-panel {
   grid-column: 3 / 11;
   grid-row: 6;
+  align-self: center;
+  position: relative;
+  z-index: 80;
+  opacity: 0;
+  visibility: hidden;
+  border-color: transparent;
   display: flex;
   align-items: center;
   justify-content: center;
   text-align: center;
-  min-height: clamp(240px, 34vw, 420px);
-  margin-top: var(--space-128);
+  min-height: clamp(320px, 42vh, 520px);
+  padding: clamp(var(--space-32), 4.2vw, var(--space-64));
+  margin-top: 0;
+  margin-bottom: 0;
+  overflow: hidden;
+  isolation: isolate;
+  background: var(--surface-primary);
+}
+
+#chapter-4 .section__content > :not(#full-view-panel) {
+  transition: opacity 0.2s linear;
 }
 
 #chapter-4 #full-view-panel:hover {
-  scale: 1.3;
-  background-color: var(--accent-highlight);
-  color: var(--text-inverse);
-  transition-duration: 0.8s;
+  transition-duration: 0.35s;
+}
+
+#chapter-4 .ch4-panel-outline {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 3;
+  pointer-events: none;
+}
+
+#chapter-4 .ch4-border-line {
+  position: absolute;
+  background: var(--text-primary);
+  opacity: 1;
+}
+
+#chapter-4 .ch4-border-line--top {
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  transform-origin: 0% 50%;
+}
+
+#chapter-4 .ch4-border-line--right {
+  top: 0;
+  right: 0;
+  width: 2px;
+  height: 100%;
+  transform-origin: 50% 0%;
+}
+
+#chapter-4 .ch4-border-line--bottom {
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  transform-origin: 0% 50%;
+}
+
+#chapter-4 .ch4-border-line--left {
+  top: 0;
+  left: 0;
+  width: 2px;
+  height: 100%;
+  transform-origin: 50% 0%;
+}
+
+#chapter-4 .ch4-fireworks {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  overflow: hidden;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+}
+
+#chapter-4 .ch4-firework-spark {
+  position: absolute;
+  width: clamp(14px, 2vw, 24px);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  opacity: 0;
+  filter: saturate(1.2);
+}
+
+#chapter-4 .ch4-final-text {
+  position: relative;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-12);
+  width: 100%;
+}
+
+#chapter-4 .ch4-final-text .type-line {
+  display: block;
+  min-height: 1.2em;
+  white-space: nowrap;
+}
+
+#chapter-4 .ch4-final-text .type-line--second {
+  display: inline-flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 0.34ch;
+}
+
+#chapter-4 .ch4-final-text .type-everything {
+  display: inline-block;
+  font-weight: 900;
+  transform-origin: 50% 70%;
+  color: inherit;
 }
 
 #chapter-4 .panel:nth-child(2),
@@ -802,11 +914,6 @@ main {
   align-self: start;
 }
 
-#chapter-4 .character-light:hover {
-  transform: translateY(4px);
-  transition-duration: 0.2s;
-}
-
 #chapter-4 .character-dark {
   grid-column: 1 / 5;
   grid-row: 4;
@@ -814,9 +921,75 @@ main {
   align-self: start;
 }
 
-#chapter-4 .character-dark:hover {
-  transform: translateY(4px);
-  transition-duration: 0.2s;
+#chapter-4 .character-portal {
+  position: relative;
+  width: clamp(170px, 20vw, 240px);
+  height: clamp(210px, 26vw, 300px);
+  z-index: 4;
+}
+
+#chapter-4 .portal-button {
+  all: unset;
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: pointer;
+}
+
+#chapter-4 .portal-button:focus-visible {
+  outline: 2px dashed var(--text-primary);
+  outline-offset: 4px;
+}
+
+#chapter-4 .character-portal.is-inactive .portal-button {
+  cursor: default;
+}
+
+#chapter-4 .portal-hole {
+  position: absolute;
+  left: 50%;
+  bottom: 16px;
+  width: 76%;
+  height: 28px;
+  transform: translateX(-50%) scale(0.74, 0.68);
+  transform-origin: 50% 50%;
+  border-radius: 50%;
+  background: radial-gradient(ellipse at center, rgba(0, 0, 0, 0.78) 0%, rgba(0, 0, 0, 0.92) 62%, rgba(0, 0, 0, 0.96) 100%);
+  opacity: 0;
+  pointer-events: none;
+}
+
+#chapter-4 .stick-figure {
+  position: absolute;
+  left: 50%;
+  bottom: 36px;
+  width: clamp(98px, 11vw, 132px);
+  height: auto;
+  transform: translateX(-50%);
+  transform-origin: 50% 90%;
+  color: var(--text-primary);
+  pointer-events: none;
+}
+
+#chapter-4 .stick-figure--light {
+  color: var(--accent-primary);
+}
+
+#chapter-4 .stick-figure--dark {
+  color: var(--accent-secondary);
+}
+
+#chapter-4 .stick-line,
+#chapter-4 .stick-head {
+  stroke: currentColor;
+  stroke-width: 6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+#chapter-4 .stick-head {
+  fill: var(--surface-primary);
 }
 
 /* ==============================

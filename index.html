@@ -145,22 +145,49 @@
       <div class="panel"> <h5>Variables started to make sense.</h5> </div>
       <div class="panel"> <h5>Tokens.<br> Naming things with intention.</h5> </div>
       <div class="panel"> <h5>Light mode.<br>Dark mode.<br>One system. Two experiences. </h5> </div>
-      <div class="character-light">
-	      <div class="shadow"></div>
-	      <div class="hole"></div>
-	      <div class="hermanWrapper">
-		    <img class="herman" src="https://assets.codepen.io/32887/herman.svg" alt="" />
-	      </div>
+      <div class="character-light character-portal" data-portal="light">
+        <button class="portal-button" type="button" aria-label="Send character to dark mode side">
+          <div class="portal-hole" aria-hidden="true"></div>
+          <svg class="stick-figure stick-figure--light" viewBox="0 0 120 180" aria-hidden="true">
+            <circle class="stick-head" cx="60" cy="28" r="14"></circle>
+            <line class="stick-line" x1="60" y1="44" x2="60" y2="97"></line>
+            <line class="stick-line" x1="60" y1="61" x2="34" y2="79"></line>
+            <line class="stick-line" x1="60" y1="61" x2="86" y2="79"></line>
+            <line class="stick-line" x1="60" y1="97" x2="41" y2="140"></line>
+            <line class="stick-line" x1="60" y1="97" x2="79" y2="140"></line>
+          </svg>
+        </button>
       </div>
-      <div class="character-dark">
-	      <div class="shadow"></div>
-	      <div class="hole"></div>
-	      <div class="hermanWrapper">
-		    <img class="herman" src="https://assets.codepen.io/32887/herman.svg" alt="" />
-	      </div>
+      <div class="character-dark character-portal" data-portal="dark">
+        <button class="portal-button" type="button" aria-label="Send character to light mode side">
+          <div class="portal-hole" aria-hidden="true"></div>
+          <svg class="stick-figure stick-figure--dark" viewBox="0 0 120 180" aria-hidden="true">
+            <circle class="stick-head" cx="60" cy="28" r="14"></circle>
+            <line class="stick-line" x1="60" y1="44" x2="60" y2="97"></line>
+            <line class="stick-line" x1="60" y1="61" x2="30" y2="83"></line>
+            <line class="stick-line" x1="60" y1="61" x2="88" y2="76"></line>
+            <line class="stick-line" x1="60" y1="97" x2="38" y2="139"></line>
+            <line class="stick-line" x1="60" y1="97" x2="84" y2="136"></line>
+          </svg>
+        </button>
       </div>
       <div class="panel"> <h5> Adding variables after designing everything? <br>That was chaos. </h5> </div>
-      <div class="panel" id="full-view-panel"> <h5> But starting with structure? <br> That changed <b>everything.</b> </h5> </div>
+      <div class="panel" id="full-view-panel">
+        <div class="ch4-panel-outline" aria-hidden="true">
+          <span class="ch4-border-line ch4-border-line--top"></span>
+          <span class="ch4-border-line ch4-border-line--right"></span>
+          <span class="ch4-border-line ch4-border-line--bottom"></span>
+          <span class="ch4-border-line ch4-border-line--left"></span>
+        </div>
+        <div class="ch4-fireworks" aria-hidden="true"></div>
+        <h5 class="ch4-final-text">
+          <span class="type-line" data-type="line-1" data-full-text="But starting with structure?">But starting with structure?</span>
+          <span class="type-line type-line--second">
+            <span class="type-prefix" data-type="line-2-prefix" data-full-text="That changed">That changed</span>
+            <span class="type-everything" data-type="line-2-word" data-full-text="everything.">everything.</span>
+          </span>
+        </h5>
+      </div>
     </div>
   </section>
 
@@ -211,6 +238,7 @@
 
 <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/ScrollTrigger.min.js"></script>
+<script src="https://unpkg.com/lucide@latest"></script>
 
 <script src="scripts/main.js" defer></script>
 
