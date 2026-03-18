@@ -39,7 +39,7 @@ You will use them to:
 3. Link sub-issues back into the master issue.
 4. Use `Blocker Report` if stuck for more than 20 minutes.
 
-# Lost in the Scroll
+# Lost in the Scroll - Why Learn Code?
 ## Description
 
 Lost in the Scroll is an interactive scrollytelling website that visualizes my journey of learning JavaScript through a comic-inspired narrative. Instead of presenting code concepts in a traditional instructional format, the site translates foundational programming ideas—such as variables, events, conditionals, and logic—into a visual and emotional experience that unfolds as the user scrolls.
@@ -56,9 +56,9 @@ A key design choice was leaning into a grunge/comic aesthetic—using high contr
 
 ## Links
 
-- Live Site: [INSERT LIVE URL]
-- Repository: [INSERT GITHUB REPO URL]
-- (Optional) Portfolio: [INSERT PORTFOLIO LINK]
+- Live Site: https://valdezizzy.github.io/scrollytelling-comic-coding-izzy/
+- Repository: https://github.com/ValdezIzzy/scrollytelling-comic-coding-izzy
+- (Optional) Portfolio: https://valdezizzy.github.io/DESN378-code-design-2/week-1/portfolio/ 
 
 ## Tech Stack
 
