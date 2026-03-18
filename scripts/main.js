@@ -1,14 +1,54 @@
 gsap.registerPlugin(ScrollTrigger);
 
 let resizeRefreshTimer = 0;
-window.addEventListener("resize", () => {
+let refreshAnimationFrame = 0;
+
+const queueGlobalScrollRefresh = (delay = 140) => {
   if (resizeRefreshTimer) window.clearTimeout(resizeRefreshTimer);
   resizeRefreshTimer = window.setTimeout(() => {
-    // Let chapter-specific handlers rebuild geometry before global refresh.
-    window.dispatchEvent(new Event("comic:resize-settled"));
-    ScrollTrigger.refresh(true);
+    if (refreshAnimationFrame) window.cancelAnimationFrame(refreshAnimationFrame);
+    refreshAnimationFrame = window.requestAnimationFrame(() => {
+      window.dispatchEvent(new Event("comic:resize-settled"));
+      ScrollTrigger.refresh(true);
+      refreshAnimationFrame = 0;
+    });
     resizeRefreshTimer = 0;
-  }, 140);
+  }, Math.max(0, delay));
+};
+
+window.addEventListener("resize", () => {
+  queueGlobalScrollRefresh(140);
+});
+
+// Startup stabilization: avoid "works only after resize" by refreshing
+// once layout-critical assets (fonts/load) are ready.
+const runStartupRefreshPass = () => {
+  queueGlobalScrollRefresh(0);
+  window.setTimeout(() => {
+    queueGlobalScrollRefresh(0);
+  }, 280);
+};
+
+if (document.readyState === "complete") {
+  runStartupRefreshPass();
+} else {
+  window.addEventListener("load", runStartupRefreshPass, { once: true });
+}
+
+if (document.fonts && document.fonts.ready && typeof document.fonts.ready.then === "function") {
+  document.fonts.ready
+    .then(() => {
+      queueGlobalScrollRefresh(0);
+    })
+    .catch(() => {
+      // Ignore font API failures.
+    });
+}
+
+window.addEventListener("pageshow", (event) => {
+  if (event.persisted) {
+    queueGlobalScrollRefresh(0);
+  }
 });
 
 const THEME_MODE_KEY = "comic-site-theme-mode";
