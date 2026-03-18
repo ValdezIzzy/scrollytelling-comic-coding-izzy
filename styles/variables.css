@@ -87,6 +87,7 @@
   --accent-highlight:var(--yellow__yellow50);
 
   --border-default:var(--neutrals__neutral20);
+  --chapter-transition-gray: var(--neutrals__neutral60);
 
 }
 
@@ -100,4 +101,5 @@ body.theme-dark {
   --text-inverse: #111318;
 
   --border-default: #4c5767;
+  --chapter-transition-gray: #2b3139;
 }

@@ -1,5 +1,675 @@
 gsap.registerPlugin(ScrollTrigger);
 
+let resizeRefreshTimer = 0;
+window.addEventListener("resize", () => {
+  if (resizeRefreshTimer) window.clearTimeout(resizeRefreshTimer);
+  resizeRefreshTimer = window.setTimeout(() => {
+    // Let chapter-specific handlers rebuild geometry before global refresh.
+    window.dispatchEvent(new Event("comic:resize-settled"));
+    ScrollTrigger.refresh(true);
+    resizeRefreshTimer = 0;
+  }, 140);
+});
+
+const THEME_MODE_KEY = "comic-site-theme-mode";
+const LEGACY_THEME_KEY = "comic-site-theme";
+const systemThemeQuery = window.matchMedia("(prefers-color-scheme: dark)");
+
+const normalizeThemeMode = (mode) => {
+  if (mode === "light" || mode === "dark" || mode === "system") return mode;
+  return "system";
+};
+
+const readSavedThemeMode = () => {
+  try {
+    const savedMode = localStorage.getItem(THEME_MODE_KEY);
+    if (savedMode === "light" || savedMode === "dark" || savedMode === "system") {
+      return savedMode;
+    }
+    const legacyTheme = localStorage.getItem(LEGACY_THEME_KEY);
+    if (legacyTheme === "light" || legacyTheme === "dark") {
+      return legacyTheme;
+    }
+  } catch (_err) {
+    // Ignore storage failures.
+  }
+  return "system";
+};
+
+const resolveEffectiveTheme = (mode) => {
+  const normalized = normalizeThemeMode(mode);
+  if (normalized === "system") {
+    return systemThemeQuery.matches ? "dark" : "light";
+  }
+  return normalized;
+};
+
+let activeThemeMode = readSavedThemeMode();
+
+const applyThemeMode = (
+  mode,
+  { persist = true, refresh = true, emit = true } = {}
+) => {
+  activeThemeMode = normalizeThemeMode(mode);
+  const effectiveTheme = resolveEffectiveTheme(activeThemeMode);
+  document.body.classList.toggle("theme-dark", effectiveTheme === "dark");
+
+  if (persist) {
+    try {
+      localStorage.setItem(THEME_MODE_KEY, activeThemeMode);
+      localStorage.setItem(LEGACY_THEME_KEY, effectiveTheme);
+    } catch (_err) {
+      // Ignore storage failures.
+    }
+  }
+
+  if (emit) {
+    window.dispatchEvent(new CustomEvent("comic:theme-updated", {
+      detail: {
+        mode: activeThemeMode,
+        effectiveTheme
+      }
+    }));
+  }
+
+  if (refresh) {
+    ScrollTrigger.refresh();
+  }
+
+  return effectiveTheme;
+};
+
+window.comicTheme = {
+  getMode: () => activeThemeMode,
+  getEffectiveTheme: () => resolveEffectiveTheme(activeThemeMode),
+  setMode: (mode, options) => applyThemeMode(mode, options),
+  applyThemeMode
+};
+
+// Apply saved mode once before chapter timelines initialize.
+applyThemeMode(activeThemeMode, {
+  persist: false,
+  refresh: false,
+  emit: false
+});
+
+const handleSystemThemeChange = () => {
+  if (activeThemeMode !== "system") return;
+  applyThemeMode("system", {
+    persist: false,
+    refresh: true,
+    emit: true
+  });
+};
+
+if (systemThemeQuery.addEventListener) {
+  systemThemeQuery.addEventListener("change", handleSystemThemeChange);
+} else if (systemThemeQuery.addListener) {
+  systemThemeQuery.addListener(handleSystemThemeChange);
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  const themeModeSelect = document.querySelector("#theme-mode-select");
+  const themeModeIcon = document.querySelector("#theme-mode-icon");
+  if (!themeModeSelect) return;
+
+  const buildLightBurstPath = () => {
+    const centerX = 12;
+    const centerY = 12;
+    const spikes = 10;
+    const points = [];
+
+    for (let i = 0; i < spikes * 2; i += 1) {
+      const outerPoint = i % 2 === 0;
+      const baseRadius = outerPoint
+        ? gsap.utils.random(8.4, 10.2)
+        : gsap.utils.random(4.6, 6.2);
+      const angle = (-Math.PI / 2) + ((i * Math.PI) / spikes) + gsap.utils.random(-0.085, 0.085);
+      const x = centerX + (Math.cos(angle) * baseRadius);
+      const y = centerY + (Math.sin(angle) * baseRadius);
+      points.push(`${i === 0 ? "M" : "L"} ${x.toFixed(2)} ${y.toFixed(2)}`);
+    }
+
+    return `${points.join(" ")} Z`;
+  };
+
+  const buildSystemFlamePath = (cx, cy, scale = 1, wobble = 0) => {
+    const height = (2.62 * scale) + gsap.utils.random(-0.20, 0.24);
+    const width = (1.86 * scale) + gsap.utils.random(-0.12, 0.16);
+    const lean = wobble + gsap.utils.random(-0.34, 0.34);
+
+    const tipX = cx + lean;
+    const tipY = cy - (height * 0.98);
+    const radiusX = width * 0.84;
+    const radiusY = height * 0.60;
+    const bodyCenterY = cy + (height * 0.26);
+    const rightX = cx + radiusX + (lean * 0.10);
+    const leftX = cx - radiusX + (lean * 0.10);
+    const neckY = cy - (height * 0.08);
+    const rightShoulderX = cx + (width * 0.42) + (lean * 0.18);
+    const leftShoulderX = cx - (width * 0.42) + (lean * 0.18);
+    const shoulderY = cy - (height * 0.58);
+
+    return `M ${tipX.toFixed(2)} ${tipY.toFixed(2)} C ${rightShoulderX.toFixed(2)} ${shoulderY.toFixed(2)} ${rightX.toFixed(2)} ${neckY.toFixed(2)} ${rightX.toFixed(2)} ${bodyCenterY.toFixed(2)} A ${radiusX.toFixed(2)} ${radiusY.toFixed(2)} 0 1 1 ${leftX.toFixed(2)} ${bodyCenterY.toFixed(2)} C ${leftX.toFixed(2)} ${neckY.toFixed(2)} ${leftShoulderX.toFixed(2)} ${shoulderY.toFixed(2)} ${tipX.toFixed(2)} ${tipY.toFixed(2)} Z`;
+  };
+
+  const getModeIconMarkup = (mode) => {
+    const normalized = normalizeThemeMode(mode);
+    if (normalized === "dark") {
+      return `
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <g class="theme-bomb-follow-lines">
+            <path class="theme-bomb-follow-line theme-bomb-follow-line--a"></path>
+            <path class="theme-bomb-follow-line theme-bomb-follow-line--b"></path>
+          </g>
+          <g class="theme-bomb-core">
+            <circle class="theme-bomb-fill" cx="12" cy="14" r="6"></circle>
+            <path class="theme-bomb-wick" d="M12 8.5 L12 7.2 Q12 5.8 11 4.3"></path>
+            <rect class="theme-bomb-fill" x="10.2" y="8.6" width="3.6" height="2.5" rx="0.4"></rect>
+            <circle class="theme-bomb-spark theme-bomb-spark--anim" cx="10.4" cy="3.8" r="1.3"></circle>
+          </g>
+        </svg>
+      `;
+    }
+    if (normalized === "light") {
+      return `
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <g class="theme-pow-emphasis">
+            <line class="theme-pow-action theme-pow-action--1" x1="12" y1="1.8" x2="12" y2="-1.0"></line>
+            <line class="theme-pow-action theme-pow-action--2" x1="20.2" y1="6.6" x2="22.7" y2="5.2"></line>
+            <line class="theme-pow-action theme-pow-action--3" x1="22.0" y1="14.5" x2="24.5" y2="14.9"></line>
+            <line class="theme-pow-action theme-pow-action--4" x1="18.8" y1="20.8" x2="20.9" y2="22.5"></line>
+            <line class="theme-pow-action theme-pow-action--5" x1="5.2" y1="20.6" x2="3.1" y2="22.4"></line>
+            <line class="theme-pow-action theme-pow-action--6" x1="2.2" y1="12.9" x2="-0.4" y2="12.9"></line>
+            <path class="theme-pow-cloud theme-pow-cloud--1" d="M3.9 18.1 C3.4 17.7 3.5 16.9 4.1 16.6 C4.1 15.8 4.9 15.2 5.8 15.4 C6.2 14.7 7.2 14.6 7.8 15.2 C8.6 15 9.3 15.7 9.3 16.5 C9.9 16.8 10.1 17.6 9.7 18.1 C9.5 18.8 8.9 19.3 8.1 19.3 H5.2 C4.5 19.3 3.9 18.8 3.9 18.1 Z"></path>
+            <path class="theme-pow-cloud theme-pow-cloud--2" d="M15.6 17.2 C15.2 16.8 15.2 16 15.8 15.7 C15.8 15 16.5 14.5 17.3 14.6 C17.6 14 18.5 13.9 19 14.4 C19.8 14.2 20.5 14.8 20.5 15.5 C21 15.8 21.1 16.5 20.8 17 C20.6 17.6 20 18 19.3 18 H16.9 C16.3 18 15.8 17.7 15.6 17.2 Z"></path>
+            <path class="theme-pow-cloud theme-pow-cloud--3" d="M8.8 21.2 C8.2 20.7 8.3 19.7 9 19.3 C9 18.3 10 17.6 11 17.8 C11.5 16.9 12.8 16.7 13.6 17.4 C14.7 17.1 15.7 17.9 15.7 19 C16.4 19.4 16.6 20.3 16.1 21 C15.8 21.8 15.1 22.3 14.2 22.3 H10.5 C9.7 22.3 9 21.8 8.8 21.2 Z"></path>
+          </g>
+          <path class="theme-pow-shape" d="${buildLightBurstPath()}"></path>
+        </svg>
+      `;
+    }
+    return `
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <g class="theme-wick-ash">
+          <path class="theme-wick-ash-trail" d="M19 4 Q14.8 5.5 12 9 Q9 13 5 17"></path>
+          <rect class="theme-wick-ash-bit theme-wick-ash-bit--1" x="17.5" y="4.1" width="1.08" height="1.08" rx="0.22"></rect>
+          <rect class="theme-wick-ash-bit theme-wick-ash-bit--2" x="16.2" y="5.2" width="0.98" height="0.98" rx="0.20"></rect>
+          <rect class="theme-wick-ash-bit theme-wick-ash-bit--3" x="15.0" y="6.3" width="1.02" height="1.02" rx="0.20"></rect>
+          <rect class="theme-wick-ash-bit theme-wick-ash-bit--4" x="13.5" y="7.7" width="0.96" height="0.96" rx="0.20"></rect>
+          <rect class="theme-wick-ash-bit theme-wick-ash-bit--5" x="12.3" y="8.9" width="1.04" height="1.04" rx="0.20"></rect>
+          <rect class="theme-wick-ash-bit theme-wick-ash-bit--6" x="10.8" y="10.2" width="0.98" height="0.98" rx="0.20"></rect>
+          <rect class="theme-wick-ash-bit theme-wick-ash-bit--7" x="9.2" y="11.8" width="1.02" height="1.02" rx="0.20"></rect>
+          <rect class="theme-wick-ash-bit theme-wick-ash-bit--8" x="7.5" y="13.6" width="1.10" height="1.10" rx="0.22"></rect>
+        </g>
+        <path class="theme-wick-only" d="M19 4 Q14.8 5.5 12 9 Q9 13 5 17"></path>
+        <path class="theme-wick-flame theme-wick-flame--outer" d="${buildSystemFlamePath(19.5, 4.2, 1.62, 0)}"></path>
+        <path class="theme-wick-flame theme-wick-flame--inner" d="${buildSystemFlamePath(19.4, 4.35, 0.96, 0)}"></path>
+        <g class="theme-wick-emphasis">
+          <g class="theme-wick-alert theme-wick-alert--1" transform="translate(-0.6 13.0)">
+            <line x1="0" y1="-2.0" x2="0" y2="1.1"></line>
+            <circle cx="0" cy="2.4" r="0.46"></circle>
+          </g>
+          <g class="theme-wick-alert theme-wick-alert--2" transform="translate(8.5 1.2)">
+            <line x1="0" y1="-2.1" x2="0" y2="1.0"></line>
+            <circle cx="0" cy="2.3" r="0.46"></circle>
+          </g>
+          <g class="theme-wick-alert theme-wick-alert--3" transform="translate(20.1 19.0)">
+            <line x1="0" y1="-2.0" x2="0" y2="1.1"></line>
+            <circle cx="0" cy="2.4" r="0.46"></circle>
+          </g>
+        </g>
+      </svg>
+    `;
+  };
+
+  const playModeIconAnimation = (mode) => {
+    if (!themeModeIcon) return;
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (reducedMotion) return;
+
+    if (themeModeIcon._iconAnim) {
+      themeModeIcon._iconAnim.kill();
+      themeModeIcon._iconAnim = null;
+    }
+
+    const svg = themeModeIcon.querySelector("svg");
+    if (!svg) return;
+    const normalized = normalizeThemeMode(mode);
+
+    if (normalized === "dark") {
+      const bombCore = themeModeIcon.querySelector(".theme-bomb-core");
+      const spark = themeModeIcon.querySelector(".theme-bomb-spark--anim");
+      const fillParts = Array.from(themeModeIcon.querySelectorAll(".theme-bomb-fill"));
+      const lineA = themeModeIcon.querySelector(".theme-bomb-follow-line--a");
+      const lineB = themeModeIcon.querySelector(".theme-bomb-follow-line--b");
+      if (!bombCore || !spark || !lineA || !lineB || fillParts.length === 0) return;
+
+      const state = {
+        rotation: 0,
+        x: 0,
+        scale: 1
+      };
+
+      const setFollowLines = (rotation, scaleValue) => {
+        const leanStrength = Math.abs(rotation);
+        if (leanStrength < 3) {
+          gsap.set([lineA, lineB], { autoAlpha: 0 });
+          return;
+        }
+
+        const sign = rotation >= 0 ? 1 : -1;
+        const cx = 12;
+        const cy = 14;
+        const visualRadius = 6 * scaleValue;
+        const gap = 1.1;
+        const sideAnchor = cx + (sign * (visualRadius + gap));
+        const bend = 1.7 + (leanStrength * 0.03);
+
+        const buildCurvePath = (distance, halfHeight) => {
+          const x = sideAnchor + (sign * distance);
+          const cpx = x + (sign * bend);
+          const topY = cy - halfHeight;
+          const bottomY = cy + halfHeight;
+          return `M ${x.toFixed(2)} ${topY.toFixed(2)} Q ${cpx.toFixed(2)} ${cy.toFixed(2)} ${x.toFixed(2)} ${bottomY.toFixed(2)}`;
+        };
+
+        lineA.setAttribute("d", buildCurvePath(1.1, 3.05));
+        lineB.setAttribute("d", buildCurvePath(2.5, 2.45));
+
+        gsap.set([lineA, lineB], {
+          autoAlpha: Math.min(1, 0.28 + (leanStrength / 18)),
+          x: 0,
+          y: 0
+        });
+      };
+
+      const applyBombState = () => {
+        gsap.set(bombCore, {
+          x: state.x,
+          rotation: state.rotation,
+          scale: state.scale,
+          transformOrigin: "50% 62%"
+        });
+        setFollowLines(state.rotation, state.scale);
+      };
+
+      gsap.set(bombCore, {
+        x: 0,
+        rotation: 0,
+        scale: 1,
+        transformOrigin: "50% 62%"
+      });
+      gsap.set([lineA, lineB], { autoAlpha: 0 });
+      gsap.set(spark, {
+        autoAlpha: 1,
+        scale: 1,
+        transformOrigin: "50% 50%",
+        attr: { cx: 10.4, cy: 3.8 }
+      });
+      gsap.set(fillParts, { fill: "#0b0b0d" });
+
+      themeModeIcon._iconAnim = gsap.timeline({
+        defaults: { ease: "none" },
+        onUpdate: applyBombState,
+        onComplete: () => {
+          state.rotation = 0;
+          state.x = 0;
+          state.scale = 1;
+          applyBombState();
+          gsap.set(fillParts, { fill: "#0b0b0d" });
+          gsap.set(spark, { autoAlpha: 1, scale: 1, attr: { cx: 10.4, cy: 3.8 } });
+          gsap.set([lineA, lineB], { autoAlpha: 0 });
+          themeModeIcon._iconAnim = null;
+        }
+      });
+
+      // Dramatic side-to-side shake.
+      let shakeAt = 0.08;
+      for (let i = 0; i < 16; i += 1) {
+        const sign = i % 2 === 0 ? -1 : 1;
+        const rotAmount = i < 10 ? 19 : 14;
+        themeModeIcon._iconAnim.to(state, {
+          rotation: sign * rotAmount,
+          x: sign * 2.0,
+          duration: 0.14,
+          ease: "power1.inOut"
+        }, shakeAt);
+        shakeAt += 0.14;
+      }
+      themeModeIcon._iconAnim.to(state, {
+        rotation: 0,
+        x: 0,
+        duration: 0.48,
+        ease: "elastic.out(1, 0.42)"
+      }, shakeAt);
+
+      // 3 aggressive scale pulses; red at each peak.
+      const pulseStarts = [0.56, 1.50, 2.44];
+      pulseStarts.forEach((start) => {
+        themeModeIcon._iconAnim
+          .to(state, { scale: 1.34, duration: 0.22, ease: "power2.out" }, start)
+          .to(fillParts, { fill: "#e11d48", duration: 0.06, ease: "none" }, start + 0.14)
+          .to(state, { scale: 0.92, duration: 0.18, ease: "power2.inOut" }, start + 0.22)
+          .to(fillParts, { fill: "#0b0b0d", duration: 0.14, ease: "none" }, start + 0.28)
+          .to(state, { scale: 1.06, duration: 0.12, ease: "power1.out" }, start + 0.40)
+          .to(state, { scale: 1.0, duration: 0.16, ease: "power1.out" }, start + 0.52);
+      });
+
+      themeModeIcon._iconAnim
+        .to(spark, { scale: 1.55, duration: 0.10 }, 0.30)
+        .to(spark, { attr: { cx: 11.5, cy: 4.7 }, duration: 0.44 }, 0.44)
+        .to(spark, { attr: { cx: 10.9, cy: 4.2 }, autoAlpha: 0.62, duration: 0.48 }, 0.92)
+        .to(spark, { attr: { cx: 11.8, cy: 5.2 }, autoAlpha: 1, duration: 0.44 }, 1.44)
+        .to(spark, { attr: { cx: 10.4, cy: 3.8 }, scale: 1, autoAlpha: 1, duration: 0.62 }, 2.04);
+
+      themeModeIcon._iconAnim.to({}, { duration: 0.34 }, 4.20);
+      return;
+    }
+
+    if (normalized === "light") {
+      const burstPath = themeModeIcon.querySelector(".theme-pow-shape");
+      const clouds = Array.from(themeModeIcon.querySelectorAll(".theme-pow-cloud"));
+      if (!burstPath) return;
+
+      gsap.set(svg, {
+        scale: 1,
+        x: 0,
+        rotation: 0,
+        transformOrigin: "50% 50%"
+      });
+      gsap.set(burstPath, {
+        rotation: 0,
+        transformOrigin: "50% 50%"
+      });
+      gsap.set(clouds, {
+        autoAlpha: 0,
+        x: 0,
+        y: 0,
+        scale: 0.44,
+        transformOrigin: "50% 50%"
+      });
+
+      themeModeIcon._iconAnim = gsap.timeline({
+        defaults: { ease: "none" },
+        onComplete: () => {
+          burstPath.setAttribute("d", buildLightBurstPath());
+          gsap.set(svg, { scale: 1, x: 0, rotation: 0 });
+          gsap.set(burstPath, { rotation: 0 });
+          gsap.set(clouds, { autoAlpha: 0, x: 0, y: 0, scale: 0.44 });
+          themeModeIcon._iconAnim = null;
+        }
+      });
+
+      const morphStart = 0.48;
+      const morphEnd = 2.42;
+      const morphSteps = 16;
+      for (let i = 0; i <= morphSteps; i += 1) {
+        const at = morphStart + ((morphEnd - morphStart) * (i / morphSteps));
+        themeModeIcon._iconAnim.add(() => {
+          burstPath.setAttribute("d", buildLightBurstPath());
+        }, at);
+      }
+
+      themeModeIcon._iconAnim
+        // scale up and hold large while the puff dissipates behind it
+        .to(svg, { scale: 1.62, duration: 0.46, ease: "back.out(2.6)" }, 0.04)
+        .to(svg, { scale: 1.58, duration: 1.98, ease: "none" }, 0.50)
+        .to(burstPath, { rotation: -5, duration: 0.32, ease: "sine.inOut" }, 0.62)
+        .to(burstPath, { rotation: 4, duration: 0.30, ease: "sine.inOut" }, 1.02)
+        .to(burstPath, { rotation: -3, duration: 0.28, ease: "sine.inOut" }, 1.40)
+        .to(burstPath, { rotation: 2, duration: 0.26, ease: "sine.inOut" }, 1.74)
+        .to(burstPath, { rotation: 0, duration: 0.30, ease: "sine.inOut" }, 2.06);
+
+      [0.46, 0.58, 0.70, 0.84, 0.98, 1.12].forEach((start, index) => {
+        const cloud = clouds[index % clouds.length];
+        const driftX = (index % 2 === 0 ? -1 : 1) * (1.9 + (index * 0.24));
+        const driftY = -3.5 - (index * 0.48);
+        themeModeIcon._iconAnim
+          .set(cloud, { autoAlpha: 0, x: 0, y: 0, scale: 0.46 }, start)
+          .to(cloud, {
+            autoAlpha: 0.95,
+            scale: 1.18,
+            duration: 0.24,
+            ease: "power2.out"
+          }, start)
+          .to(cloud, {
+            x: driftX,
+            y: driftY,
+            scale: 2.05,
+            autoAlpha: 0,
+            duration: 2.02,
+            ease: "power1.out"
+          }, start + 0.24);
+      });
+
+      // scale down and shift back into place like the bomb settle
+      themeModeIcon._iconAnim
+        .to(svg, { scale: 0.95, x: -1.8, rotation: -8, duration: 0.22, ease: "power1.inOut" }, 2.58)
+        .to(svg, { scale: 1.07, x: 1.3, rotation: 5, duration: 0.20, ease: "power1.inOut" }, 2.80)
+        .to(svg, { scale: 1.0, x: 0, rotation: 0, duration: 0.52, ease: "elastic.out(1, 0.42)" }, 3.00)
+        .to({}, { duration: 0.20 }, 3.52);
+      return;
+    }
+
+    const wick = themeModeIcon.querySelector(".theme-wick-only");
+    const ashTrail = themeModeIcon.querySelector(".theme-wick-ash-trail");
+    const ashBits = Array.from(themeModeIcon.querySelectorAll(".theme-wick-ash-bit"));
+    const alertMarks = Array.from(themeModeIcon.querySelectorAll(".theme-wick-alert"));
+    const flameOuter = themeModeIcon.querySelector(".theme-wick-flame--outer");
+    const flameInner = themeModeIcon.querySelector(".theme-wick-flame--inner");
+    if (!wick || !ashTrail || !flameOuter || !flameInner || alertMarks.length === 0) return;
+
+    const flameState = {
+      cx: 19.5,
+      cy: 4.2,
+      scale: 1.62,
+      wobble: 0
+    };
+    const flameTrack = { progress: 0 };
+
+    const applyFlameShape = () => {
+      flameOuter.setAttribute(
+        "d",
+        buildSystemFlamePath(flameState.cx, flameState.cy, flameState.scale, flameState.wobble)
+      );
+      flameInner.setAttribute(
+        "d",
+        buildSystemFlamePath(flameState.cx - 0.08, flameState.cy + 0.28, flameState.scale * 0.58, flameState.wobble * 0.54)
+      );
+    };
+
+    applyFlameShape();
+
+    const burnLength = ashTrail.getTotalLength ? ashTrail.getTotalLength() : 24;
+    const wickLength = wick.getTotalLength ? wick.getTotalLength() : burnLength;
+    const ashLagProgress = 0.052;
+    const setFlameOnWick = () => {
+      if (!wick.getPointAtLength) return;
+      const progress = gsap.utils.clamp(0, 1, flameTrack.progress);
+      const point = wick.getPointAtLength(wickLength * progress);
+      flameState.cx = point.x;
+      flameState.cy = point.y;
+      applyFlameShape();
+    };
+    const getBurnProgress = () => gsap.utils.clamp(0, 1, flameTrack.progress - ashLagProgress);
+    const setBurnState = () => {
+      const burnProgress = getBurnProgress();
+      const burnedLength = burnLength * burnProgress;
+      const remainingWick = Math.max(0.0001, burnLength - burnedLength);
+      const visibleAsh = Math.max(0.0001, burnedLength);
+      gsap.set(ashTrail, {
+        autoAlpha: burnProgress > 0.004 ? 0.92 : 0,
+        strokeDasharray: `${visibleAsh} ${burnLength}`,
+        strokeDashoffset: 0
+      });
+      gsap.set(wick, {
+        strokeDasharray: `${remainingWick} ${burnLength}`,
+        strokeDashoffset: -burnedLength
+      });
+    };
+    const setFlameAndBurn = () => {
+      setFlameOnWick();
+      setBurnState();
+    };
+    const getBurnTipPoint = () => {
+      if (!wick.getPointAtLength) return { x: 10, y: 10 };
+      const point = wick.getPointAtLength(wickLength * getBurnProgress());
+      return { x: point.x, y: point.y };
+    };
+    const placeAshBitAtBurnTip = (bit) => {
+      const tip = getBurnTipPoint();
+      const bitW = parseFloat(bit.getAttribute("width")) || 1;
+      const bitH = parseFloat(bit.getAttribute("height")) || 1;
+      gsap.set(bit, {
+        attr: {
+          x: tip.x - (bitW / 2),
+          y: tip.y - (bitH / 2)
+        }
+      });
+    };
+
+    setFlameAndBurn();
+
+    gsap.set(wick, {
+      stroke: "#fffdeb",
+      strokeDasharray: burnLength,
+      strokeDashoffset: 0,
+      transformOrigin: "50% 50%"
+    });
+    gsap.set(ashTrail, {
+      autoAlpha: 0,
+      x: 0,
+      y: 0,
+      rotation: 0,
+      strokeDasharray: `0 ${burnLength}`,
+      strokeDashoffset: 0,
+      transformOrigin: "50% 50%"
+    });
+    gsap.set(ashBits, {
+      autoAlpha: 0,
+      x: 0,
+      y: 0,
+      rotation: 0,
+      scale: 0.96,
+      transformOrigin: "50% 50%"
+    });
+    gsap.set(alertMarks, {
+      autoAlpha: 0,
+      scale: 0.90,
+      transformOrigin: "50% 50%"
+    });
+    gsap.set([flameOuter, flameInner], {
+      autoAlpha: 1,
+      transformOrigin: "50% 70%"
+    });
+
+    themeModeIcon._iconAnim = gsap.timeline({
+      defaults: { ease: "none" },
+      repeat: 1,
+      yoyo: true,
+      repeatDelay: 0.12,
+      onComplete: () => {
+        themeModeIcon._iconAnim = null;
+      }
+    });
+
+    themeModeIcon._iconAnim
+      .to(flameTrack, {
+        progress: 0.72,
+        duration: 2.30,
+        ease: "none",
+        onUpdate: setFlameAndBurn
+      }, 0.12)
+      .to(flameState, {
+        wobble: 0.46,
+        duration: 0.12,
+        repeat: 24,
+        yoyo: true,
+        ease: "sine.inOut",
+        onUpdate: applyFlameShape
+      }, 0.12)
+      .to(flameState, {
+        scale: 1.74,
+        duration: 0.22,
+        repeat: 11,
+        yoyo: true,
+        ease: "sine.inOut",
+        onUpdate: applyFlameShape
+      }, 0.14)
+      .to([flameOuter, flameInner], {
+        autoAlpha: 0,
+        duration: 0.22,
+        ease: "power1.out"
+      }, 2.62)
+      .to({}, { duration: 0.40 }, 3.40);
+
+    ashBits.forEach((bit, index) => {
+      const start = 0.46 + (index * 0.24);
+      themeModeIcon._iconAnim
+        .add(() => placeAshBitAtBurnTip(bit), start)
+        .set(bit, { autoAlpha: 0, x: 0, y: 0, rotation: 0, scale: 0.96 }, start)
+        .to(bit, { autoAlpha: 1.0, scale: 1.34, duration: 0.10, ease: "none" }, start)
+        .to(bit, {
+          autoAlpha: 0,
+          y: () => window.innerHeight * gsap.utils.random(0.82, 1.20),
+          x: () => gsap.utils.random(-12, 12),
+          rotation: () => gsap.utils.random(-220, 220),
+          scale: () => gsap.utils.random(1.16, 2.05),
+          duration: gsap.utils.random(1.42, 2.08),
+          ease: "power2.in"
+        }, start + 0.10);
+    });
+
+    alertMarks.forEach((mark, index) => {
+      const start = 0.34 + (index * 0.10);
+      themeModeIcon._iconAnim
+        .to(mark, {
+          autoAlpha: 0.96,
+          scale: 1.08,
+          duration: 0.30,
+          repeat: 9,
+          yoyo: true,
+          ease: "sine.inOut"
+        }, start)
+        .to(mark, { autoAlpha: 0, duration: 0.24, ease: "power1.out" }, 3.08 + (index * 0.04));
+    });
+
+    themeModeIcon._iconAnim.timeScale(1.12);
+  };
+
+  const renderModeIcon = (mode) => {
+    if (!themeModeIcon) return;
+    const normalized = normalizeThemeMode(mode);
+    const shouldRender = normalized === "light" || themeModeIcon.dataset.mode !== normalized;
+    if (!shouldRender) return;
+    themeModeIcon.dataset.mode = normalized;
+    themeModeIcon.innerHTML = getModeIconMarkup(normalized);
+    playModeIconAnimation(normalized);
+  };
+
+  const syncModeSelect = () => {
+    const currentMode = window.comicTheme?.getMode?.() || "system";
+    if (themeModeSelect.value !== currentMode) {
+      themeModeSelect.value = currentMode;
+    }
+    renderModeIcon(currentMode);
+  };
+
+  syncModeSelect();
+  themeModeSelect.addEventListener("change", () => {
+    const selectedMode = normalizeThemeMode(themeModeSelect.value);
+    if (window.comicTheme?.setMode) {
+      window.comicTheme.setMode(selectedMode, {
+        persist: true,
+        refresh: true,
+        emit: true
+      });
+    }
+  });
+
+  window.addEventListener("comic:theme-updated", syncModeSelect);
+});
 /* =========================================================
    HERO + CHAPTER 1 — pinned entrance on scroll
    ========================================================= */
@@ -10,7 +680,7 @@ document.addEventListener("DOMContentLoaded", () => {
   if (!hero || !ch1 || ch1Panels.length === 0) return;
 
   const title = hero.querySelector("h1");
-  const sub = hero.querySelector("h5");
+  const sub = hero.querySelector("p");
   if (!title || !sub) return;
 
   const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -529,7 +1199,16 @@ document.addEventListener("DOMContentLoaded", () => {
         ease: "none"
       }, 0.00)
       .to(ch4, {
-        backgroundColor: () => (ch5 ? getComputedStyle(ch5).backgroundColor : "rgb(82, 82, 82)"),
+        backgroundColor: () => {
+          const ch5Bg = ch5 ? getComputedStyle(ch5).backgroundColor : "";
+          if (ch5Bg && ch5Bg !== "rgba(0, 0, 0, 0)" && ch5Bg !== "transparent") {
+            return ch5Bg;
+          }
+          const docStyles = getComputedStyle(document.body);
+          const themedGray = docStyles.getPropertyValue("--chapter-transition-gray").trim();
+          if (themedGray) return themedGray;
+          return "rgb(82, 82, 82)";
+        },
         duration: 3.2,
         ease: "none"
       }, 0.48)
@@ -662,24 +1341,46 @@ document.addEventListener("DOMContentLoaded", () => {
     portalParts.light.hole &&
     portalParts.dark.hole;
 
-  const themeKey = "comic-site-theme";
+  const syncChapter4ThemeVisuals = () => {
+    // Clear inline colors so Chapter 4 always resolves from active theme tokens.
+    gsap.set(ch4, { clearProps: "backgroundColor" });
+    if (fullViewPanel) {
+      gsap.set(fullViewPanel, { clearProps: "backgroundColor,borderColor" });
+    }
 
-  const setTheme = (theme) => {
-    const isDark = theme === "dark";
-    document.body.classList.toggle("theme-dark", isDark);
-    try {
-      localStorage.setItem(themeKey, isDark ? "dark" : "light");
-    } catch (_err) {
-      // Ignore storage failures.
+    const stickHeads = ch4.querySelectorAll(".stick-head");
+    if (stickHeads.length) {
+      gsap.set(stickHeads, { clearProps: "fill,stroke" });
+    }
+
+    const finalTrigger = ScrollTrigger.getById("ch4-final-panel");
+    if (finalTrigger?.animation) {
+      const progress = finalTrigger.animation.progress();
+      finalTrigger.animation.invalidate();
+      finalTrigger.animation.progress(progress);
     }
   };
 
-  const getSavedTheme = () => {
-    try {
-      return localStorage.getItem(themeKey);
-    } catch (_err) {
-      return null;
+  const setTheme = (theme) => {
+    const nextTheme = theme === "dark" ? "dark" : "light";
+    if (window.comicTheme?.setMode) {
+      window.comicTheme.setMode(nextTheme, {
+        persist: true,
+        refresh: false,
+        emit: true
+      });
+    } else {
+      document.body.classList.toggle("theme-dark", nextTheme === "dark");
     }
+    syncChapter4ThemeVisuals();
+    ScrollTrigger.refresh();
+  };
+
+  const getEffectiveTheme = () => {
+    if (window.comicTheme?.getEffectiveTheme) {
+      return window.comicTheme.getEffectiveTheme();
+    }
+    return document.body.classList.contains("theme-dark") ? "dark" : "light";
   };
 
   const setPortalRestState = (parts, active) => {
@@ -702,14 +1403,15 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   };
 
+  syncChapter4ThemeVisuals();
+
   if (hasPortalParts) {
-    let activePortal = getSavedTheme() === "dark" ? "dark" : "light";
+    let activePortal = getEffectiveTheme() === "dark" ? "dark" : "light";
     let isSwapping = false;
 
     const syncPortalStates = () => {
       setPortalRestState(portalParts.light, activePortal === "light");
       setPortalRestState(portalParts.dark, activePortal === "dark");
-      setTheme(activePortal === "dark" ? "dark" : "light");
     };
 
     const runPortalSwap = () => {
@@ -838,6 +1540,16 @@ document.addEventListener("DOMContentLoaded", () => {
       if (activePortal !== "dark") return;
       runPortalSwap();
     });
+
+    window.addEventListener("comic:theme-updated", (event) => {
+      syncChapter4ThemeVisuals();
+      if (isSwapping) return;
+      const effectiveTheme = event?.detail?.effectiveTheme || getEffectiveTheme();
+      const nextPortal = effectiveTheme === "dark" ? "dark" : "light";
+      if (activePortal === nextPortal) return;
+      activePortal = nextPortal;
+      syncPortalStates();
+    });
   }
 
   // Defer creation until other chapter triggers (including pinned ones) are registered.
@@ -850,6 +1562,1449 @@ document.addEventListener("DOMContentLoaded", () => {
       ScrollTrigger.refresh();
     });
   });
+});
+
+
+/* =========================================================
+   CHAPTER 5 — panel 2 fade-in, then title slam/clatter
+   ========================================================= */
+document.addEventListener("DOMContentLoaded", () => {
+  const ch5 = document.querySelector("#chapter-5");
+  if (!ch5) return;
+
+  const content = ch5.querySelector(".section__content");
+  const titlePanel = content?.querySelector(".panel:nth-child(1)");
+  const introPanel = content?.querySelector(".panel:nth-child(2)");
+  const blackoutSection = document.querySelector("#chapter-5-blackout");
+  const blackoutPanel = blackoutSection?.querySelector("#blackout");
+  const blackoutSeedLines = blackoutPanel
+    ? Array.from(blackoutPanel.querySelectorAll(".repeat-text"))
+    : [];
+  const tiltedPanels = [
+    content?.querySelector(".panel:nth-child(3)"),
+    content?.querySelector(".panel:nth-child(4)"),
+    content?.querySelector(".panel:nth-child(5)")
+  ].filter(Boolean);
+  if (!titlePanel || !introPanel) return;
+
+  const titleTriggerId = "ch5-title-clatter";
+  const existingTitle = ScrollTrigger.getById(titleTriggerId);
+  if (existingTitle) existingTitle.kill();
+
+  const setIntroPanelRestState = () => {
+    gsap.set(introPanel, {
+      autoAlpha: 0,
+      y: 88,
+      scale: 0.94,
+      rotation: -1.5,
+      force3D: true
+    });
+  };
+
+  const setTitlePanelRestState = () => {
+    gsap.set(titlePanel, {
+      zIndex: 9,
+      autoAlpha: 0,
+      y: -420,
+      rotation: -8,
+      scale: 0.98,
+      transformOrigin: "50% 100%",
+      force3D: true
+    });
+  };
+
+  setIntroPanelRestState();
+  setTitlePanelRestState();
+
+  const hasTiltedPanels = tiltedPanels.length === 3;
+  const baseTiltedRotations = hasTiltedPanels
+    ? tiltedPanels.map((panel) => Number(gsap.getProperty(panel, "rotation")) || 0)
+    : [];
+  const tiltedSpinConfigs = [
+    {
+      origin: "0% 0%",
+      rotation: "+=1080",
+      duration: 1.9,
+      trailAnchorX: "100%",
+      trailAnchorY: "50%",
+      trailDirection: 0
+    },
+    {
+      origin: "100% 100%",
+      rotation: "-=1080",
+      duration: 2.0,
+      trailAnchorX: "100%",
+      trailAnchorY: "50%",
+      trailDirection: 0
+    },
+    {
+      origin: "100% 0%",
+      rotation: "+=1080",
+      duration: 2.1,
+      trailAnchorX: "100%",
+      trailAnchorY: "50%",
+      trailDirection: 0
+    }
+  ];
+  const spinTrailPalette = [
+    "var(--accent-primary)",
+    "var(--accent-secondary)",
+    "var(--accent-highlight)",
+    "var(--red__red50)",
+    "var(--blue__blue40)",
+    "var(--yellow__yellow60)"
+  ];
+
+  const setTiltedPanelsRestState = () => {
+    if (!hasTiltedPanels) return;
+    gsap.set(tiltedPanels, {
+      autoAlpha: 0,
+      x: Math.round(window.innerWidth * 0.26),
+      scale: 0.9,
+      rotation: (index) => baseTiltedRotations[index],
+      force3D: true
+    });
+  };
+
+  setTiltedPanelsRestState();
+
+  const spinTrailData = hasTiltedPanels
+    ? tiltedPanels.map((panel, panelIndex) => {
+      const spinCfg = tiltedSpinConfigs[panelIndex] || tiltedSpinConfigs[0];
+      const trailLayer = document.createElement("div");
+      trailLayer.className = "ch5-spin-lines";
+      trailLayer.style.left = spinCfg.trailAnchorX;
+      trailLayer.style.top = spinCfg.trailAnchorY;
+
+      const axis = document.createElement("span");
+      axis.className = "ch5-spin-axis";
+      trailLayer.appendChild(axis);
+
+      const lines = [];
+      for (let i = 0; i < 11; i += 1) {
+        const line = document.createElement("span");
+        const color = spinTrailPalette[(panelIndex * 2 + i) % spinTrailPalette.length];
+        line.className = "ch5-spin-line";
+        line.style.width = `${30 + gsap.utils.random(0, 10)}px`;
+        line.style.height = `${2 + (i % 3)}px`;
+        line.style.backgroundColor = color;
+        line.style.boxShadow = `0 0 10px ${color}`;
+        axis.appendChild(line);
+
+        gsap.set(line, {
+          x: 0,
+          y: 0,
+          autoAlpha: 0,
+          scaleX: 0.3,
+          transformOrigin: "0% 50%"
+        });
+
+        lines.push(line);
+      }
+
+      gsap.set(axis, { rotation: spinCfg.trailDirection });
+      panel.appendChild(trailLayer);
+      return {
+        panel,
+        layer: trailLayer,
+        axis,
+        lines,
+        tween: null
+      };
+    })
+    : [];
+
+  const layoutTiltedSpinTrailLanes = (trail) => {
+    const panelHeight = trail.panel?.offsetHeight || 220;
+    const edgeInset = 4;
+    const usableSpan = Math.max(24, panelHeight - (edgeInset * 2));
+    const count = trail.lines.length;
+    trail.lines.forEach((line, index) => {
+      const t = count <= 1 ? 0.5 : index / (count - 1);
+      const y = ((-panelHeight * 0.5) + edgeInset) + (t * usableSpan);
+      gsap.set(line, { y });
+    });
+  };
+
+  const resetTiltedSpinTrails = () => {
+    if (!hasTiltedPanels) return;
+    spinTrailData.forEach((trail, trailIndex) => {
+      const spinCfg = tiltedSpinConfigs[trailIndex] || tiltedSpinConfigs[0];
+      if (trail.tween) {
+        trail.tween.kill();
+        trail.tween = null;
+      }
+      trail.layer.style.left = spinCfg.trailAnchorX;
+      trail.layer.style.top = spinCfg.trailAnchorY;
+      gsap.set(trail.layer, { autoAlpha: 0 });
+      gsap.set(trail.axis, { rotation: spinCfg.trailDirection });
+      layoutTiltedSpinTrailLanes(trail);
+      gsap.set(trail.lines, {
+        x: 0,
+        autoAlpha: 0,
+        scaleX: 0.25
+      });
+    });
+  };
+
+  resetTiltedSpinTrails();
+
+  const blackoutTriggerId = "ch5-blackout-fill";
+  const existingBlackout = ScrollTrigger.getById(blackoutTriggerId);
+  if (existingBlackout) existingBlackout.kill();
+  let blackoutCloud = null;
+  let blackoutTimeline = null;
+  let blackoutScrollTrigger = null;
+
+  const buildBlackoutCloud = () => {
+    if (!blackoutPanel) return [];
+    if (blackoutCloud) blackoutCloud.remove();
+
+    blackoutCloud = document.createElement("div");
+    blackoutCloud.className = "ch5-blackout-cloud";
+    blackoutPanel.appendChild(blackoutCloud);
+
+    const phrases = blackoutSeedLines
+      .map((line) => line.textContent?.trim())
+      .filter(Boolean);
+    const phrasePool = phrases.length ? phrases : ["Save the choice."];
+
+    const panelWidth = Math.max(blackoutPanel.offsetWidth || 0, 360);
+    const panelHeight = Math.max(blackoutPanel.offsetHeight || 0, 170);
+    const cols = Math.max(18, Math.ceil(panelWidth / 64));
+    const rows = Math.max(12, Math.ceil(panelHeight / 16));
+    const layers = 5;
+    const clampLeft = gsap.utils.clamp(2, 98);
+    const clampTop = gsap.utils.clamp(4, 96);
+    const words = [];
+
+    for (let layer = 0; layer < layers; layer += 1) {
+      for (let row = 0; row < rows; row += 1) {
+        for (let col = 0; col < cols; col += 1) {
+          const word = document.createElement("span");
+          const wordIndex = (layer * rows * cols) + (row * cols) + col;
+          const jitterX = gsap.utils.random(-0.44, 0.44);
+          const jitterY = gsap.utils.random(-0.4, 0.4);
+          const leftPct = clampLeft(((col + 0.5 + jitterX) / cols) * 100);
+          const topPct = clampTop(((row + 0.5 + jitterY) / rows) * 100);
+
+          word.className = "ch5-blackout-word";
+          word.textContent = phrasePool[wordIndex % phrasePool.length];
+          word.style.left = `${leftPct}%`;
+          word.style.top = `${topPct}%`;
+          word.style.fontSize = `${gsap.utils.random(10, 15, 1)}px`;
+          word.style.fontWeight = `${gsap.utils.random(700, 900, 100)}`;
+          blackoutCloud.appendChild(word);
+
+          gsap.set(word, {
+            xPercent: -50,
+            yPercent: -50,
+            rotation: gsap.utils.random(-8, 8),
+            scale: gsap.utils.random(0.46, 0.82),
+            autoAlpha: 0
+          });
+
+          words.push(word);
+        }
+      }
+    }
+
+    return words;
+  };
+
+  const buildBlackoutTimeline = () => {
+    if (!blackoutPanel) return null;
+    if (blackoutTimeline) {
+      blackoutTimeline.kill();
+      blackoutTimeline = null;
+    }
+
+    const words = buildBlackoutCloud();
+    const revealOrder = words.slice().sort(() => Math.random() - 0.5);
+    const slowCount = Math.max(20, Math.floor(revealOrder.length * 0.34));
+    const midCount = Math.max(slowCount + 20, Math.floor(revealOrder.length * 0.68));
+    const slowWords = revealOrder.slice(0, slowCount);
+    const midWords = revealOrder.slice(slowCount, midCount);
+    const fastWords = revealOrder.slice(midCount);
+    const phase = {
+      panelRevealAt: 0.02,
+      panelRevealDuration: 0.62,
+      slowStart: 0.46,
+      slowDuration: 0.98,
+      slowStagger: 0.026,
+      midStart: 1.20,
+      midDuration: 0.62,
+      midStagger: 0.012,
+      fastStart: 1.74,
+      fastDuration: 0.44,
+      fastStagger: 0.003
+    };
+    const getPhaseEnd = (count, start, duration, staggerEach) =>
+      start + duration + (Math.max(0, count - 1) * staggerEach);
+    const slowEnd = getPhaseEnd(
+      slowWords.length,
+      phase.slowStart,
+      phase.slowDuration,
+      phase.slowStagger
+    );
+    const midEnd = getPhaseEnd(
+      midWords.length,
+      phase.midStart,
+      phase.midDuration,
+      phase.midStagger
+    );
+    const fastEnd = getPhaseEnd(
+      fastWords.length,
+      phase.fastStart,
+      phase.fastDuration,
+      phase.fastStagger
+    );
+    const settleStart = Math.max(slowEnd, midEnd, fastEnd) + 0.08;
+
+    blackoutTimeline = gsap.timeline({
+      paused: true,
+      defaults: { ease: "none" }
+    });
+
+    blackoutTimeline
+      .set(blackoutPanel, {
+        backgroundColor: "var(--surface-primary)",
+        borderColor: "var(--text-primary)",
+        autoAlpha: 1,
+        y: 0
+      }, 0)
+      .set(blackoutSeedLines, { autoAlpha: 0.82, color: "var(--text-primary)" }, 0)
+      .set(words, { autoAlpha: 0, color: "var(--text-primary)" }, 0)
+      .to(slowWords, {
+        autoAlpha: 1,
+        scale: 1.12,
+        duration: phase.slowDuration,
+        stagger: { each: phase.slowStagger, from: "random" },
+        ease: "steps(1)"
+      }, phase.slowStart)
+      .to(midWords, {
+        autoAlpha: 1,
+        scale: 1.12,
+        duration: phase.midDuration,
+        stagger: { each: phase.midStagger, from: "random" },
+        ease: "steps(1)"
+      }, phase.midStart)
+      .to(fastWords, {
+        autoAlpha: 1,
+        scale: 1.16,
+        duration: phase.fastDuration,
+        stagger: { each: phase.fastStagger, from: "random" },
+        ease: "steps(1)"
+      }, phase.fastStart)
+      .to(words, {
+        autoAlpha: 1,
+        scale: 1.08,
+        duration: 0.72,
+        stagger: { each: 0.0012, from: "random" },
+        ease: "steps(1)"
+      }, settleStart)
+      .to(words, {
+        autoAlpha: 1,
+        scale: 1.16,
+        duration: 1.24,
+        stagger: { each: 0.00045, from: "random" },
+        ease: "steps(1)"
+      }, ">+0.1")
+      .to(blackoutSeedLines, {
+        autoAlpha: 0,
+        duration: 1.1,
+        ease: "sine.out"
+      }, "<0.08");
+
+    return blackoutTimeline;
+  };
+
+  const setupBlackoutTrigger = () => {
+    if (!blackoutPanel || !blackoutSection) return;
+    const blackoutTriggerTarget = blackoutSection;
+    const blackoutPinTarget = blackoutSection;
+    if (blackoutScrollTrigger) {
+      blackoutScrollTrigger.kill();
+      blackoutScrollTrigger = null;
+    }
+
+    const timeline = buildBlackoutTimeline();
+    if (!timeline) return;
+    timeline.progress(0).pause(0);
+    gsap.set(blackoutPanel, {
+      autoAlpha: 1,
+      y: 0,
+      backgroundColor: "var(--surface-primary)",
+      borderColor: "var(--text-primary)"
+    });
+    gsap.set(blackoutSeedLines, {
+      autoAlpha: 0.82,
+      color: "var(--text-primary)"
+    });
+
+    blackoutScrollTrigger = ScrollTrigger.create({
+      id: blackoutTriggerId,
+      trigger: blackoutTriggerTarget,
+      start: "top top",
+      end: () => `+=${Math.round(window.innerHeight * 1.25)}`,
+      scrub: 1,
+      pin: blackoutPinTarget,
+      pinSpacing: true,
+      anticipatePin: 1,
+      animation: timeline,
+      invalidateOnRefresh: true,
+      onEnter: () => {
+        timeline.progress(0).pause(0);
+      },
+      onLeaveBack: () => {
+        timeline.progress(0).pause(0);
+        gsap.set(blackoutPanel, {
+          autoAlpha: 1,
+          y: 0,
+          backgroundColor: "var(--surface-primary)",
+          borderColor: "var(--text-primary)"
+        });
+        gsap.set(blackoutSeedLines, {
+          autoAlpha: 0.82,
+          color: "var(--text-primary)"
+        });
+      },
+      onUpdate: (self) => {
+        if (self.progress < 0.08) {
+          gsap.set(blackoutPanel, {
+            backgroundColor: "var(--surface-primary)",
+            borderColor: "var(--text-primary)"
+          });
+          gsap.set(blackoutSeedLines, {
+            autoAlpha: 0.82,
+            color: "var(--text-primary)"
+          });
+        }
+      },
+      onRefresh: (self) => {
+        if (window.scrollY <= (self.start + 2)) {
+          timeline.progress(0).pause(0);
+          gsap.set(blackoutPanel, {
+            autoAlpha: 1,
+            y: 0,
+            backgroundColor: "var(--surface-primary)",
+            borderColor: "var(--text-primary)"
+          });
+          gsap.set(blackoutSeedLines, {
+            autoAlpha: 0.82,
+            color: "var(--text-primary)"
+          });
+        }
+      }
+    });
+  };
+
+  setupBlackoutTrigger();
+
+  const tiltedPanelsTl = hasTiltedPanels
+    ? gsap.timeline({
+      paused: true,
+      onReverseComplete: () => {
+        pauseTiltedPanelPulse();
+        resetTiltedSpinTrails();
+        setTiltedPanelsRestState();
+      }
+    })
+    : null;
+  const tiltedPanelPulseTweens = hasTiltedPanels
+    ? tiltedPanels.map((panel, index) => gsap.fromTo(panel, {
+      scale: 1
+    }, {
+      scale: 1.02 + (index * 0.006),
+      duration: 1.02 + (index * 0.08),
+      repeat: -1,
+      yoyo: true,
+      ease: "sine.inOut",
+      paused: true,
+      immediateRender: false
+    }))
+    : [];
+
+  const playTiltedPanelPulse = () => {
+    tiltedPanelPulseTweens.forEach((tw) => tw.play());
+  };
+
+  const pauseTiltedPanelPulse = () => {
+    tiltedPanelPulseTweens.forEach((tw) => tw.pause(0));
+  };
+
+  if (tiltedPanelsTl) {
+    tiltedPanelsTl
+      .set(tiltedPanels, {
+        autoAlpha: 0,
+        x: () => Math.round(window.innerWidth * 0.26),
+        scale: 0.9,
+        rotation: (index) => baseTiltedRotations[index]
+      }, 0)
+      .to(tiltedPanels, {
+        autoAlpha: 1,
+        x: 0,
+        scale: 1.04,
+        duration: 1.12,
+        ease: "power2.out",
+        stagger: 0
+      }, 0)
+      .to(tiltedPanels, {
+        scale: 0.98,
+        duration: 0.48,
+        ease: "sine.inOut",
+        stagger: 0
+      }, 1.12)
+      .to(tiltedPanels, {
+        scale: 1,
+        duration: 0.38,
+        ease: "sine.out",
+        stagger: 0
+      }, 1.60)
+      .add(() => {
+        playTiltedPanelPulse();
+      }, 1.98);
+  }
+
+  if (hasTiltedPanels) {
+    tiltedPanels.forEach((panel, index) => {
+      const cfg = tiltedSpinConfigs[index] || tiltedSpinConfigs[0];
+      panel.style.cursor = "pointer";
+      panel.addEventListener("click", () => {
+        if (panel.dataset.spinBusy === "1") return;
+        panel.dataset.spinBusy = "1";
+        const pulseTween = tiltedPanelPulseTweens[index];
+        const spinTrail = spinTrailData[index];
+        if (pulseTween) pulseTween.pause();
+
+        if (spinTrail) {
+          if (spinTrail.tween) {
+            spinTrail.tween.kill();
+            spinTrail.tween = null;
+          }
+
+          const pulseRepeatCount = Math.max(5, Math.round(cfg.duration / 0.2));
+          const travelDistance = 98;
+          spinTrail.layer.style.left = cfg.trailAnchorX;
+          spinTrail.layer.style.top = cfg.trailAnchorY;
+          gsap.set(spinTrail.layer, { autoAlpha: 1 });
+          gsap.set(spinTrail.axis, { rotation: cfg.trailDirection });
+          layoutTiltedSpinTrailLanes(spinTrail);
+          gsap.set(spinTrail.lines, {
+            x: 0,
+            autoAlpha: 0.12,
+            scaleX: 0.35
+          });
+
+          const trailTl = gsap.timeline({
+            onComplete: () => {
+              spinTrail.tween = null;
+            }
+          });
+
+          spinTrail.lines.forEach((line, lineIndex) => {
+            trailTl.fromTo(line, {
+              x: 2,
+              autoAlpha: 0,
+              scaleX: 0.28
+            }, {
+              keyframes: [
+                { autoAlpha: 0.9, duration: 0.05, ease: "none" },
+                { x: travelDistance, duration: 0.16 + (lineIndex * 0.01), ease: "none" },
+                { autoAlpha: 0, duration: 0.08, ease: "none" }
+              ],
+              scaleX: 1,
+              repeat: pulseRepeatCount
+            }, lineIndex * 0.015);
+          });
+
+          trailTl.to(spinTrail.layer, {
+            autoAlpha: 0,
+            duration: 0.24,
+            ease: "power1.out"
+          }, Math.max(0, cfg.duration - 0.14));
+
+          spinTrail.tween = trailTl;
+        }
+
+        gsap.to(panel, {
+          transformOrigin: cfg.origin,
+          rotation: cfg.rotation,
+          duration: cfg.duration,
+          ease: "power4.out",
+          onComplete: () => {
+            panel.dataset.spinBusy = "0";
+            if (pulseTween) pulseTween.play();
+          }
+        });
+      });
+    });
+  }
+
+  const introPanelTl = gsap.timeline({
+    paused: true,
+    onReverseComplete: () => {
+      setIntroPanelRestState();
+    }
+  });
+  introPanelTl.to(introPanel, {
+    autoAlpha: 1,
+    y: 0,
+    scale: 1,
+    rotation: 0,
+    duration: 0.95,
+    ease: "power2.out"
+  }, 0);
+
+  const tlCh5Intro = gsap.timeline({
+    paused: true,
+    defaults: {
+      overwrite: "auto"
+    },
+    onReverseComplete: () => {
+      setTitlePanelRestState();
+    }
+  });
+
+  tlCh5Intro
+    .set(titlePanel, {
+      zIndex: 9,
+      autoAlpha: 0,
+      y: -420,
+      rotation: -8,
+      scale: 0.98,
+      transformOrigin: "50% 100%",
+      force3D: true
+    }, 0.00)
+    .to(titlePanel, {
+      autoAlpha: 1,
+      y: 128,
+      rotation: 10,
+      scale: 1.045,
+      duration: 0.14,
+      ease: "none"
+    }, 0.78)
+    .to(titlePanel, {
+      y: -18,
+      rotation: -5,
+      scale: 0.995,
+      duration: 0.10,
+      ease: "none"
+    }, 0.92)
+    .to(titlePanel, {
+      y: 10,
+      rotation: 2.8,
+      scale: 1.008,
+      duration: 0.09,
+      ease: "none"
+    }, 1.02)
+    .to(titlePanel, {
+      y: 0,
+      rotation: 0,
+      scale: 1,
+      duration: 0.12,
+      ease: "none"
+    }, 1.11);
+
+  const playCh5Intro = () => {
+    tlCh5Intro.restart(true);
+  };
+
+  const triggerDelaySeconds = 1.0;
+  let introDelayCall = null;
+  let titleDelayCall = null;
+  let hasQueuedIntroPanel = false;
+  let hasQueuedCh5Intro = false;
+  let hasPlayedIntroPanel = false;
+  let hasPlayedCh5Intro = false;
+  let hasPlayedTiltedPanels = false;
+  let lastCh5ScrollY = window.scrollY || window.pageYOffset || 0;
+
+  const clearCh5QueuedCalls = () => {
+    if (introDelayCall) {
+      introDelayCall.kill();
+      introDelayCall = null;
+    }
+    if (titleDelayCall) {
+      titleDelayCall.kill();
+      titleDelayCall = null;
+    }
+    hasQueuedIntroPanel = false;
+    hasQueuedCh5Intro = false;
+  };
+
+  const resetCh5Intro = () => {
+    clearCh5QueuedCalls();
+    introPanelTl.pause(0);
+    setIntroPanelRestState();
+    tlCh5Intro.pause(0);
+    setTitlePanelRestState();
+    if (tiltedPanelsTl) {
+      tiltedPanelsTl.pause(0);
+      pauseTiltedPanelPulse();
+      resetTiltedSpinTrails();
+      setTiltedPanelsRestState();
+    }
+    hasPlayedIntroPanel = false;
+    hasPlayedCh5Intro = false;
+    hasPlayedTiltedPanels = false;
+  };
+
+  const updateCh5IntroByScroll = () => {
+    const currentScrollY = window.scrollY || window.pageYOffset || 0;
+    const scrollingUp = currentScrollY < (lastCh5ScrollY - 0.5);
+    lastCh5ScrollY = currentScrollY;
+
+    const rect = ch5.getBoundingClientRect();
+    const scrubProgress = gsap.utils.clamp(
+      0,
+      1,
+      ((window.innerHeight * 1.16) - rect.top) / (window.innerHeight * 2.45)
+    );
+    // Delay panel 2 so it animates while visible, and start title/tilted sooner.
+    const introProg = gsap.utils.clamp(0, 1, (scrubProgress - 0.27) / 0.28);
+    const titleProg = gsap.utils.clamp(0, 1, (scrubProgress - 0.21) / 0.26);
+    const tiltedProg = gsap.utils.clamp(0, 1, (scrubProgress - 0.27) / 0.30);
+
+    // Scrub timelines directly from scroll so fast scrolling can't skip them.
+    clearCh5QueuedCalls();
+    introPanelTl.progress(introProg).pause();
+    tlCh5Intro.progress(titleProg).pause();
+    if (tiltedPanelsTl) {
+      tiltedPanelsTl.progress(tiltedProg).pause();
+      if (tiltedProg >= 0.9) {
+        playTiltedPanelPulse();
+      } else {
+        pauseTiltedPanelPulse();
+        resetTiltedSpinTrails();
+      }
+    }
+
+    hasPlayedIntroPanel = introProg >= 0.98;
+    hasPlayedCh5Intro = titleProg >= 0.98;
+    hasPlayedTiltedPanels = tiltedProg >= 0.98;
+
+    if (scrubProgress <= 0.001 && !scrollingUp) {
+      setIntroPanelRestState();
+      setTitlePanelRestState();
+      setTiltedPanelsRestState();
+    }
+    return;
+
+    const tiltedAnchorTop = hasTiltedPanels
+      ? tiltedPanels[1].getBoundingClientRect().top
+      : Number.POSITIVE_INFINITY;
+    const introStartReached = rect.top <= (window.innerHeight * 0.86);
+    const titleStartReached = rect.top <= (window.innerHeight * 0.64);
+    const introReverseReached = rect.top >= (window.innerHeight * 0.02);
+    const titleReverseReached = rect.top >= (window.innerHeight * 0.18);
+    const resetReached = rect.top > (window.innerHeight * 0.90);
+    const tiltedStartReached =
+      tiltedAnchorTop <= (window.innerHeight * 0.96) ||
+      rect.top <= (window.innerHeight * 0.72);
+    const tiltedReverseReached =
+      tiltedAnchorTop >= (window.innerHeight * 0.52);
+    const tiltedReverseReady = !tiltedPanelsTl || tiltedPanelsTl.progress() <= 0.02;
+    const introReverseReady = tlCh5Intro.progress() <= 0.72;
+
+    if (scrollingUp && tiltedReverseReached && hasPlayedTiltedPanels && tiltedPanelsTl) {
+      hasPlayedTiltedPanels = false;
+      pauseTiltedPanelPulse();
+      tiltedPanelsTl.reverse();
+    }
+
+    if (
+      scrollingUp &&
+      titleReverseReached &&
+      hasPlayedCh5Intro &&
+      !hasPlayedTiltedPanels &&
+      tiltedReverseReady
+    ) {
+      if (titleDelayCall) {
+        titleDelayCall.kill();
+        titleDelayCall = null;
+      }
+      hasQueuedCh5Intro = false;
+      hasPlayedCh5Intro = false;
+      tlCh5Intro.reverse();
+    }
+
+    if (
+      scrollingUp &&
+      introReverseReached &&
+      hasPlayedIntroPanel &&
+      introReverseReady
+    ) {
+      if (introDelayCall) {
+        introDelayCall.kill();
+        introDelayCall = null;
+      }
+      hasQueuedIntroPanel = false;
+      hasPlayedIntroPanel = false;
+      introPanelTl.reverse();
+    }
+
+    if (!scrollingUp && introStartReached && !hasPlayedIntroPanel && !hasQueuedIntroPanel) {
+      hasQueuedIntroPanel = true;
+      introDelayCall = gsap.delayedCall(triggerDelaySeconds, () => {
+        introDelayCall = null;
+        hasQueuedIntroPanel = false;
+        if (hasPlayedIntroPanel) return;
+        hasPlayedIntroPanel = true;
+        introPanelTl.restart(true);
+      });
+    }
+
+    if (!scrollingUp && titleStartReached && !hasPlayedCh5Intro && !hasQueuedCh5Intro) {
+      hasQueuedCh5Intro = true;
+      titleDelayCall = gsap.delayedCall(triggerDelaySeconds, () => {
+        titleDelayCall = null;
+        hasQueuedCh5Intro = false;
+        if (hasPlayedCh5Intro) return;
+        hasPlayedCh5Intro = true;
+        playCh5Intro();
+      });
+    }
+
+    if (!scrollingUp && tiltedStartReached && !hasPlayedTiltedPanels && tiltedPanelsTl) {
+      hasPlayedTiltedPanels = true;
+      tiltedPanelsTl.restart(true);
+    }
+
+    if (resetReached && (hasPlayedIntroPanel || hasPlayedCh5Intro || hasPlayedTiltedPanels || hasQueuedIntroPanel || hasQueuedCh5Intro)) {
+      resetCh5Intro();
+    }
+  };
+
+  window.addEventListener("scroll", updateCh5IntroByScroll, { passive: true });
+  const handleChapter5ResizeSettled = () => {
+    if (tiltedPanelsTl) {
+      tiltedPanelsTl.invalidate();
+      setTiltedPanelsRestState();
+      resetTiltedSpinTrails();
+    }
+    setupBlackoutTrigger();
+    updateCh5IntroByScroll();
+  };
+  window.addEventListener("comic:resize-settled", handleChapter5ResizeSettled);
+  requestAnimationFrame(() => {
+    updateCh5IntroByScroll();
+  });
+});
+
+/* =========================================================
+   CHAPTER 5 OUTRO — scrubbed fade-in for last two panels
+   ========================================================= */
+document.addEventListener("DOMContentLoaded", () => {
+  const outro = document.querySelector("#chapter-5-outro");
+  if (!outro) return;
+
+  const panelOne = outro.querySelector(".panel:nth-child(1)");
+  const panelTwo = outro.querySelector(".panel:nth-child(2)");
+  const powerfulWord = outro.querySelector(".ch5-powerful-word");
+  if (!panelOne || !panelTwo) return;
+
+  let wipe = outro.querySelector("#ch5-outro-wipe");
+  if (!wipe) {
+    wipe = document.createElement("div");
+    wipe.id = "ch5-outro-wipe";
+    wipe.setAttribute("aria-hidden", "true");
+    outro.appendChild(wipe);
+  }
+
+  const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const legacyVolcano = ScrollTrigger.getById("ch5-outro-volcano");
+  if (legacyVolcano) legacyVolcano.kill();
+  const fadeTriggerId = "ch5-outro-fade";
+
+  if (prefersReducedMotion) {
+    gsap.set([panelOne, panelTwo], { clearProps: "all" });
+    if (powerfulWord) gsap.set(powerfulWord, { clearProps: "all" });
+    gsap.set([outro, wipe], { clearProps: "all" });
+    return;
+  }
+
+  let tlFade = null;
+  const positionWipeCircle = () => {
+    if (!wipe) return;
+
+    const outroRect = outro.getBoundingClientRect();
+    if (!outroRect.width || !outroRect.height) return;
+
+    const wordRect = powerfulWord?.getBoundingClientRect();
+    const centerX = wordRect
+      ? (wordRect.left - outroRect.left) + (wordRect.width * 0.5)
+      : (outroRect.width * 0.5);
+    const centerY = wordRect
+      ? (wordRect.top - outroRect.top) + (wordRect.height * 0.5)
+      : (outroRect.height * 0.5);
+
+    // Keep wipe perfectly circular by forcing equal width/height.
+    const size = Math.max(outroRect.width, outroRect.height) * 3.4;
+    wipe.style.width = `${size}px`;
+    wipe.style.height = `${size}px`;
+
+    gsap.set(wipe, {
+      x: centerX - (size * 0.5),
+      y: centerY - (size * 0.5),
+      transformOrigin: "50% 50%"
+    });
+  };
+
+  const setupOutroFade = () => {
+    const existingFade = ScrollTrigger.getById(fadeTriggerId);
+    if (existingFade) existingFade.kill();
+    if (tlFade) {
+      tlFade.kill();
+      tlFade = null;
+    }
+
+    gsap.set(outro, { backgroundColor: "var(--chapter-transition-gray)" });
+    if (powerfulWord) {
+      gsap.set(powerfulWord, {
+        scale: 1,
+        rotation: 0,
+        x: 0,
+        y: 0,
+        transformOrigin: "50% 68%",
+        force3D: false
+      });
+    }
+    // Measure wipe anchor from the word's resting position (before panel offset-in).
+    gsap.set(panelOne, { x: 0, y: 0 });
+    gsap.set(panelTwo, { x: 0, y: 0 });
+    positionWipeCircle();
+
+    gsap.set(panelOne, {
+      autoAlpha: 0,
+      x: -56,
+      y: 72
+    });
+    gsap.set(panelTwo, {
+      autoAlpha: 0,
+      x: 56,
+      y: 80
+    });
+    gsap.set(wipe, {
+      autoAlpha: 0,
+      scale: 0.001,
+      backgroundColor: "var(--surface-primary)"
+    });
+
+    tlFade = gsap.timeline({
+      scrollTrigger: {
+        id: fadeTriggerId,
+        trigger: outro,
+        start: "top top",
+        end: () => `+=${Math.round(window.innerHeight * 1.35)}`,
+        scrub: 1,
+        pin: true,
+        pinSpacing: true,
+        anticipatePin: 1,
+        invalidateOnRefresh: true
+        // markers: true
+      }
+    });
+
+    tlFade
+      .to(panelOne, {
+        autoAlpha: 1,
+        x: 0,
+        y: 0,
+        duration: 0.54,
+        ease: "none"
+      }, 0.00)
+      .to(panelTwo, {
+        autoAlpha: 1,
+        x: 0,
+        y: 0,
+        duration: 0.54,
+        ease: "none"
+      }, 0.52);
+
+    if (powerfulWord) {
+      tlFade
+        .to(powerfulWord, {
+          scale: 1.24,
+          duration: 0.14,
+          ease: "none"
+        }, 1.00)
+        .to(powerfulWord, {
+          keyframes: [
+            { x: -5, y: 2, rotation: -3.5, duration: 0.05, ease: "none" },
+            { x: 6, y: -2, rotation: 3.5, duration: 0.05, ease: "none" },
+            { x: -4, y: 1, rotation: -2.5, duration: 0.05, ease: "none" },
+            { x: 3, y: -1, rotation: 2, duration: 0.05, ease: "none" },
+            { x: 0, y: 0, rotation: 0, duration: 0.04, ease: "none" }
+          ]
+        }, 1.14)
+        .to(powerfulWord, {
+          scale: 34,
+          x: 0,
+          y: 0,
+          rotation: 0,
+          duration: 0.44,
+          ease: "power3.in",
+          force3D: false
+        }, 1.36);
+    }
+
+    tlFade.to(wipe, {
+      autoAlpha: 1,
+      scale: 1.06,
+      duration: 0.46,
+      ease: "power2.in"
+    }, 1.36);
+    tlFade.to(wipe, {
+      scale: 1.2,
+      duration: 0.26,
+      ease: "none"
+    }, 1.82);
+  };
+
+  setupOutroFade();
+  window.addEventListener("comic:resize-settled", setupOutroFade);
+});
+
+
+
+/* =========================================================
+   CHAPTER 6 — scrubbed panel draw + typed text
+   ========================================================= */
+document.addEventListener("DOMContentLoaded", () => {
+  const ch6 = document.querySelector("#chapter-6");
+  if (!ch6) return;
+
+  const content = ch6.querySelector(".section__content");
+  if (!content) return;
+  const guidesSvg = ch6.querySelector(".svg-guides");
+
+  const panels = Array.from(content.querySelectorAll(".panel"));
+  if (!panels.length) return;
+
+  const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const firstTriggerId = "ch6-draw-type-first";
+  const secondTriggerId = "ch6-draw-type-second";
+  const thirdTriggerId = "ch6-draw-type-third";
+  const guidesTriggerId = "ch6-guides-draw";
+  const phaseStartFirst = "top 44%";
+  const phaseEndFirst = "top 0%";
+  const phaseStartSecond = "top 26%";
+  const phaseEndSecond = "top -18%";
+  const phaseStartThird = "top 8%";
+  const phaseEndThird = "top -36%";
+  let tlCh6First = null;
+  let tlCh6Second = null;
+  let tlCh6Third = null;
+  let tlCh6Guides = null;
+
+  const escapeHtml = (text) =>
+    text
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+
+  const readPanelText = (el) =>
+    el.innerHTML
+      .replace(/<br\s*\/?>/gi, "\n")
+      .replace(/<[^>]+>/g, "")
+      .replace(/\u00a0/g, " ")
+      .replace(/\r/g, "")
+      .replace(/[ \t]+\n/g, "\n")
+      .replace(/\n[ \t]+/g, "\n")
+      .trim();
+
+  const setTypedText = (el, fullText, count) => {
+    const safeCount = Math.max(0, Math.min(fullText.length, Math.floor(count)));
+    const slice = fullText.slice(0, safeCount);
+    el.innerHTML = escapeHtml(slice).replace(/\n/g, "<br>");
+  };
+
+  const ensureOutline = (panel) => {
+    let outline = panel.querySelector(":scope > .ch6-draw-outline");
+    if (!outline) {
+      outline = document.createElement("div");
+      outline.className = "ch6-draw-outline";
+      outline.innerHTML = `
+        <span class="ch6-draw-line ch6-draw-line--top"></span>
+        <span class="ch6-draw-line ch6-draw-line--right"></span>
+        <span class="ch6-draw-line ch6-draw-line--bottom"></span>
+        <span class="ch6-draw-line ch6-draw-line--left"></span>
+      `;
+      panel.appendChild(outline);
+    }
+
+    return {
+      top: outline.querySelector(".ch6-draw-line--top"),
+      right: outline.querySelector(".ch6-draw-line--right"),
+      bottom: outline.querySelector(".ch6-draw-line--bottom"),
+      left: outline.querySelector(".ch6-draw-line--left")
+    };
+  };
+
+  const getPanelAccent = (index) => {
+    const panelNumber = index + 1;
+    if (panelNumber === 1 || panelNumber === 4 || panelNumber === 7) {
+      return "var(--accent-primary)";
+    }
+    if (panelNumber === 2 || panelNumber === 5 || panelNumber === 8) {
+      return "var(--accent-secondary)";
+    }
+    return "var(--accent-highlight)";
+  };
+
+  const panelData = panels.map((panel, index) => {
+    const heading = panel.querySelector("h2, h4, p");
+    const fullText = heading ? readPanelText(heading) : "";
+    const lines = ensureOutline(panel);
+    const accent = getPanelAccent(index);
+    return { panel, heading, fullText, lines, accent };
+  });
+
+  const setReducedMotionState = () => {
+    panelData.forEach(({ panel, heading, fullText, lines, accent }) => {
+      if (heading) {
+        heading.innerHTML = escapeHtml(fullText).replace(/\n/g, "<br>");
+      }
+      gsap.set([lines.top, lines.bottom], { scaleX: 1, autoAlpha: 1, backgroundColor: accent });
+      gsap.set([lines.right, lines.left], { scaleY: 1, autoAlpha: 1, backgroundColor: accent });
+      gsap.set(panel, { backgroundColor: "var(--surface-primary)" });
+      if (heading) gsap.set(heading, { color: "var(--text-primary)" });
+    });
+  };
+
+  const setupGuideLines = () => {
+    if (!guidesSvg) return;
+
+    const existingGuides = ScrollTrigger.getById(guidesTriggerId);
+    if (existingGuides) existingGuides.kill();
+
+    if (tlCh6Guides) {
+      tlCh6Guides.kill();
+      tlCh6Guides = null;
+    }
+
+    guidesSvg.innerHTML = "";
+
+    if (prefersReducedMotion) return;
+
+    const contentRect = content.getBoundingClientRect();
+    const width = Math.max(1, Math.round(contentRect.width));
+    const height = Math.max(1, Math.round(contentRect.height));
+    guidesSvg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+    guidesSvg.setAttribute("preserveAspectRatio", "none");
+
+    const ns = "http://www.w3.org/2000/svg";
+    const accentTokens = ["var(--accent-primary)", "var(--accent-secondary)", "var(--accent-highlight)"];
+    const accentClasses = ["is-accent-primary", "is-accent-secondary", "is-accent-highlight"];
+    const resolveColorToken = (token) => {
+      const probe = document.createElement("span");
+      probe.style.position = "absolute";
+      probe.style.visibility = "hidden";
+      probe.style.pointerEvents = "none";
+      probe.style.color = token;
+      content.appendChild(probe);
+      const resolved = getComputedStyle(probe).color.trim();
+      probe.remove();
+      return resolved || token;
+    };
+    const palette = accentTokens.map(resolveColorToken);
+    const createdLines = [];
+    const candidates = [];
+
+    panels.forEach((panel) => {
+      const rect = panel.getBoundingClientRect();
+      const x = rect.left - contentRect.left;
+      const y = rect.top - contentRect.top;
+      const w = rect.width;
+      const h = rect.height;
+
+      // Full-span lines aligned to panel edges.
+      candidates.push({
+        orientation: "h",
+        pos: y,
+        sortY: y,
+        x1: 0,
+        y1: y,
+        x2: width,
+        y2: y,
+        color: null
+      });
+      candidates.push({
+        orientation: "h",
+        pos: y + h,
+        sortY: y + h,
+        x1: 0,
+        y1: y + h,
+        x2: width,
+        y2: y + h,
+        color: null
+      });
+      candidates.push({
+        orientation: "v",
+        pos: x,
+        sortY: y,
+        x1: x,
+        y1: 0,
+        x2: x,
+        y2: height,
+        color: null
+      });
+      candidates.push({
+        orientation: "v",
+        pos: x + w,
+        sortY: y,
+        x1: x + w,
+        y1: 0,
+        x2: x + w,
+        y2: height,
+        color: null
+      });
+    });
+
+    const seen = new Set();
+    candidates.forEach((candidate) => {
+      const key = `${candidate.orientation}:${Math.round(candidate.pos)}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+
+      const line = document.createElementNS(ns, "line");
+      line.classList.add("guide", "ch6-guide-line");
+      line.setAttribute("x1", `${candidate.x1}`);
+      line.setAttribute("y1", `${candidate.y1}`);
+      line.setAttribute("x2", `${candidate.x2}`);
+      line.setAttribute("y2", `${candidate.y2}`);
+      const paletteIndex = createdLines.length % palette.length;
+      const color = palette[paletteIndex];
+      line.style.stroke = color;
+      line.setAttribute("stroke", color);
+      line.style.opacity = "1";
+      line.setAttribute("stroke-opacity", "1");
+      line.classList.add(accentClasses[paletteIndex]);
+      line.dataset.sortY = `${candidate.sortY}`;
+      guidesSvg.appendChild(line);
+      createdLines.push(line);
+    });
+
+    const orderedLines = createdLines
+      .slice()
+      .sort((a, b) => Number(a.dataset.sortY) - Number(b.dataset.sortY));
+
+    orderedLines.forEach((line) => {
+      const length = line.getTotalLength();
+      gsap.set(line, {
+        strokeDasharray: length,
+        strokeDashoffset: length,
+        autoAlpha: 1,
+        strokeOpacity: 1
+      });
+    });
+
+    tlCh6Guides = gsap.timeline({
+      scrollTrigger: {
+        id: guidesTriggerId,
+        trigger: ch6,
+        start: phaseStartFirst,
+        end: phaseEndThird,
+        scrub: 0.2,
+        invalidateOnRefresh: true
+      }
+    });
+
+    tlCh6Guides.to(orderedLines, {
+      strokeDashoffset: 0,
+      duration: 1,
+      stagger: { each: 0.015, from: 0 },
+      ease: "none"
+    }, 1.5);
+  };
+
+  const addRandomPanelAnimations = (
+    timeline,
+    group,
+    {
+      startMin = 0.0,
+      startMax = 0.22,
+      drawMin = 0.10,
+      drawMax = 0.18,
+      typeMin = 0.12,
+      typeMax = 0.2,
+      typeDelayMin = 0.01,
+      typeDelayMax = 0.06
+    } = {}
+  ) => {
+    group.forEach(({ panel, heading, fullText, lines, accent }) => {
+      const at = gsap.utils.random(startMin, startMax, 0.001);
+      const drawDuration = gsap.utils.random(drawMin, drawMax, 0.001);
+      const lineStagger = drawDuration * gsap.utils.random(0.3, 0.5, 0.001);
+      const lineDuration = drawDuration * gsap.utils.random(0.32, 0.42, 0.001);
+      const lineOrder = gsap.utils.shuffle(["top", "right", "bottom", "left"]);
+      const typeDelay = gsap.utils.random(typeDelayMin, typeDelayMax, 0.001);
+      const typeDuration = gsap.utils.random(typeMin, typeMax, 0.001);
+      const drawEnd = at + (lineStagger * Math.max(0, lineOrder.length - 1)) + lineDuration;
+      const typeEnd = at + typeDelay + typeDuration;
+      const confirmAt = Math.max(drawEnd, typeEnd) + 0.02;
+
+      lineOrder.forEach((lineKey, lineIndex) => {
+        const isHorizontal = lineKey === "top" || lineKey === "bottom";
+        timeline.to(lines[lineKey], {
+          [isHorizontal ? "scaleX" : "scaleY"]: 1,
+          duration: lineDuration,
+          ease: "none"
+        }, at + (lineIndex * lineStagger));
+      });
+
+      timeline.to(panel, {
+        backgroundColor: "var(--surface-primary)",
+        duration: drawDuration * 0.92,
+        ease: "none"
+      }, at + (drawDuration * 0.12));
+
+      if (!heading || !fullText.length) return;
+
+      const typeState = { count: 0 };
+      timeline.to(typeState, {
+        count: fullText.length,
+        duration: typeDuration,
+        ease: "none",
+        onUpdate: () => {
+          setTypedText(heading, fullText, typeState.count);
+        }
+      }, at + typeDelay);
+
+      timeline.to(panel, {
+        y: -4,
+        scale: 1.014,
+        duration: 0.12,
+        ease: "none"
+      }, confirmAt);
+      timeline.to(panel, {
+        y: 0,
+        scale: 1,
+        duration: 0.16,
+        ease: "none"
+      }, confirmAt + 0.12);
+      timeline.to([lines.top, lines.right, lines.bottom, lines.left], {
+        backgroundColor: "var(--neutrals__neutral100)",
+        duration: 0.28,
+        ease: "none"
+      }, confirmAt + 0.06);
+
+      gsap.set([lines.top, lines.right, lines.bottom, lines.left], {
+        backgroundColor: accent
+      });
+    });
+  };
+
+  const setupChapter6Timeline = () => {
+    const existingFirst = ScrollTrigger.getById(firstTriggerId);
+    const existingSecond = ScrollTrigger.getById(secondTriggerId);
+    const existingThird = ScrollTrigger.getById(thirdTriggerId);
+    if (existingFirst) existingFirst.kill();
+    if (existingSecond) existingSecond.kill();
+    if (existingThird) existingThird.kill();
+
+    if (tlCh6First) {
+      tlCh6First.kill();
+      tlCh6First = null;
+    }
+    if (tlCh6Second) {
+      tlCh6Second.kill();
+      tlCh6Second = null;
+    }
+    if (tlCh6Third) {
+      tlCh6Third.kill();
+      tlCh6Third = null;
+    }
+
+    setupGuideLines();
+
+    if (prefersReducedMotion) {
+      setReducedMotionState();
+      return;
+    }
+
+    panelData.forEach(({ panel, heading, lines, accent }) => {
+      if (heading) heading.innerHTML = "";
+      gsap.set(panel, { backgroundColor: "transparent", y: 0, scale: 1 });
+      if (heading) gsap.set(heading, { color: "var(--text-primary)" });
+      gsap.set([lines.top, lines.bottom], { scaleX: 0, autoAlpha: 1, backgroundColor: accent });
+      gsap.set([lines.right, lines.left], { scaleY: 0, autoAlpha: 1, backgroundColor: accent });
+    });
+
+    const firstGroup = panelData.slice(0, 3);
+    const secondGroup = panelData.slice(3, 7);
+    const thirdGroup = panelData.slice(7, 8);
+
+    tlCh6First = gsap.timeline({
+      scrollTrigger: {
+        id: firstTriggerId,
+        trigger: ch6,
+        start: phaseStartFirst,
+        end: phaseEndFirst,
+        scrub: 0.28,
+        invalidateOnRefresh: true
+        // markers: true
+      }
+    });
+    addRandomPanelAnimations(tlCh6First, firstGroup, {
+      startMin: 0.22,
+      startMax: 0.46,
+      drawMin: 0.16,
+      drawMax: 0.26,
+      typeMin: 0.18,
+      typeMax: 0.3,
+      typeDelayMin: 0.03,
+      typeDelayMax: 0.08
+    });
+
+    tlCh6Second = gsap.timeline({
+      scrollTrigger: {
+        id: secondTriggerId,
+        trigger: ch6,
+        start: phaseStartSecond,
+        end: phaseEndSecond,
+        scrub: 0.22,
+        invalidateOnRefresh: true
+        // markers: true
+      }
+    });
+    addRandomPanelAnimations(tlCh6Second, secondGroup, {
+      startMin: 0.20,
+      startMax: 0.34,
+      drawMin: 0.12,
+      drawMax: 0.12,
+      typeMin: 0.12,
+      typeMax: 0.18,
+      typeDelayMin: 0.01,
+      typeDelayMax: 0.04
+    });
+
+    tlCh6Third = gsap.timeline({
+      scrollTrigger: {
+        id: thirdTriggerId,
+        trigger: ch6,
+        start: phaseStartThird,
+        end: phaseEndThird,
+        scrub: 0.22,
+        invalidateOnRefresh: true
+        // markers: true
+      }
+    });
+    addRandomPanelAnimations(tlCh6Third, thirdGroup, {
+      startMin: 0.20,
+      startMax: 0.28,
+      drawMin: 0.12,
+      drawMax: 0.12,
+      typeMin: 0.10,
+      typeMax: 0.16,
+      typeDelayMin: 0.0,
+      typeDelayMax: 0.03
+    });
+  };
+
+  setupChapter6Timeline();
+  window.addEventListener("comic:resize-settled", setupChapter6Timeline);
 });
 
 
@@ -882,10 +3037,10 @@ function restoreBrLinesFromSpans(el) {
 }
 
 function animateCh1CodePanel(panel) {
-  const h5 = panel.querySelector("h5");
-  if (!h5) return;
+  const bodyText = panel.querySelector("p");
+  if (!bodyText) return;
 
-  const lines = splitBrLinesToSpans(h5);
+  const lines = splitBrLinesToSpans(bodyText);
   if (lines.length < 4) return;
 
   const [cssLine, svgLine, animLine, genLine] = lines;
@@ -949,7 +3104,7 @@ function animateCh1PanelText(panel) {
 
   const h2 = panel.querySelector("h2");
   const h4 = panel.querySelector("h4");
-  const h5 = panel.querySelector("h5");
+  const bodyText = panel.querySelector("p");
 
   switch (index) {
     case 1: {
@@ -980,9 +3135,9 @@ function animateCh1PanelText(panel) {
     }
 
     case 2: {
-      if (!h5) break;
+      if (!bodyText) break;
 
-      gsap.from(h5, {
+      gsap.from(bodyText, {
         x: 18,
         duration: 0.35,
         ease: "power2.out"
@@ -991,9 +3146,9 @@ function animateCh1PanelText(panel) {
     }
 
     case 3: {
-      if (!h5) break;
+      if (!bodyText) break;
 
-      gsap.from(h5, {
+      gsap.from(bodyText, {
         scale: 0.92,
         duration: 0.4,
         ease: "back.out(2)"
@@ -1007,9 +3162,9 @@ function animateCh1PanelText(panel) {
     }
 
     case 5: {
-      if (!h5) break;
+      if (!bodyText) break;
 
-      gsap.from(h5, {
+      gsap.from(bodyText, {
         y: 12,
         duration: 0.4,
         ease: "power2.out"
@@ -1092,8 +3247,8 @@ function resetCh1Panel(panel) {
     y: 10
   });
 
-  const h5 = panel.querySelector("h5");
-  if (h5) restoreBrLinesFromSpans(h5);
+  const bodyText = panel.querySelector("p");
+  if (bodyText) restoreBrLinesFromSpans(bodyText);
 
   if (panel._pulseTween) {
     panel._pulseTween.kill();
@@ -1576,6 +3731,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const titlePanel = content.querySelector(".panel:nth-child(1)");
   const captionPanel = content.querySelector("#caption-panel");
+  const screamFigureShell = captionPanel?.querySelector(".ch3-scream-shell");
+  const screamFigure = captionPanel?.querySelector(".ch3-scream-figure");
   const middlePanel = content.querySelector(".panel:nth-child(3)");
   const rightPanel = content.querySelector(".panel:nth-child(4)");
   const questionsPanel = content.querySelector(".panel:nth-child(5)");
@@ -1647,15 +3804,8 @@ document.addEventListener("DOMContentLoaded", () => {
   const staticParallaxIcons = ch3.querySelectorAll(".p-icon");
 
   if (prefersReducedMotion) {
-    gsap.set(
-      [titlePanel, captionPanel, middlePanel, rightPanel, questionsPanel, revealText, panelContent, splitLeftHalf, splitRightHalf],
-      {
-      clearProps: "all"
-      }
-    );
-    gsap.set(staticParallaxIcons, { clearProps: "all" });
+    // Keep Chapter 3 transition timeline active for narrative continuity.
     gsap.set(floatingIcons, { autoAlpha: 0.14 });
-    return;
   }
 
   /* -------------------------
@@ -1675,6 +3825,22 @@ document.addEventListener("DOMContentLoaded", () => {
   gsap.set(captionPanel, { rotation: -20 });
   gsap.set(middlePanel, { rotation: 12 });
   gsap.set(rightPanel, { rotation: 24 });
+  if (screamFigureShell) {
+    gsap.set(screamFigureShell, {
+      rotation: -4,
+      x: 0,
+      y: 0,
+      transformOrigin: "50% 85%"
+    });
+  }
+  if (screamFigure && screamFigureShell) {
+    const enableScreamFallback = () => screamFigureShell.classList.add("is-fallback");
+    if (screamFigure.complete && screamFigure.naturalWidth === 0) {
+      enableScreamFallback();
+    } else {
+      screamFigure.addEventListener("error", enableScreamFallback, { once: true });
+    }
+  }
 
   gsap.set(questionsPanel, {
     y: 220,
@@ -1697,13 +3863,13 @@ document.addEventListener("DOMContentLoaded", () => {
     xPercent: -50,
     yPercent: -50,
     left: "50%",
-    top: "42%",
+    top: "50%",
     width: "min(86vw, 960px)",
     position: "fixed",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    zIndex: 7,
+    zIndex: 3,
     rotation: 0,
     autoAlpha: 0,
     scale: 0.32,
@@ -1736,9 +3902,16 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   });
 
-  const getQuestionsPanelCenterDeltaY = () => {
-    const rect = questionsPanel.getBoundingClientRect();
-    return (window.innerHeight * 0.5) - (rect.top + rect.height * 0.5);
+  const getQuestionsPanelCenteredY = () => {
+    const panelRect = questionsPanel.getBoundingClientRect();
+    const chapterRect = ch3.getBoundingClientRect();
+    const panelCenterInChapter = (panelRect.top - chapterRect.top) + (panelRect.height * 0.5);
+    const targetY = (window.innerHeight * 0.5) - panelCenterInChapter + 220;
+    return gsap.utils.clamp(
+      -window.innerHeight * 0.45,
+      window.innerHeight * 0.35,
+      targetY
+    );
   };
 
 /* -------------------------
@@ -1750,11 +3923,37 @@ const tlFall = gsap.timeline({
   scrollTrigger: {
     trigger: ch3,
     start: "top top",
-    end: () => "+=" + Math.round(window.innerHeight * 2.6),
+    end: () => "+=" + Math.round(window.innerHeight * 3.8),
     scrub: 1,
     pin: true,
     pinSpacing: true,
-    invalidateOnRefresh: true
+    invalidateOnRefresh: true,
+    onRefreshInit: () => {
+      gsap.set(questionsPanel, { y: 220, autoAlpha: 0 });
+      gsap.set(panelContent, { autoAlpha: 1 });
+      gsap.set([splitLeftHalf, splitRightHalf], {
+        x: 0,
+        y: 0,
+        rotation: 0,
+        autoAlpha: 1
+      });
+      if (screamFigureShell) {
+        gsap.set(screamFigureShell, {
+          rotation: -4,
+          x: 0,
+          y: 0
+        });
+      }
+      gsap.set(revealText, {
+        left: "50%",
+        top: "50%",
+        xPercent: -50,
+        yPercent: -50,
+        y: 0,
+        scale: 0.32,
+        autoAlpha: 0
+      });
+    }
     // markers: true
   }
 });
@@ -1776,6 +3975,44 @@ tlFall
     duration: 0.22,
     ease: "none"
   }, 0.12)
+
+  // Scream figure rocks like the mode-toggle bomb while the panel settles.
+  .to(screamFigureShell, {
+    rotation: 9,
+    x: 2,
+    duration: 0.10,
+    ease: "none"
+  }, 0.16)
+  .to(screamFigureShell, {
+    rotation: -8,
+    x: -2,
+    duration: 0.10,
+    ease: "none"
+  }, 0.26)
+  .to(screamFigureShell, {
+    rotation: 7,
+    x: 2,
+    duration: 0.10,
+    ease: "none"
+  }, 0.36)
+  .to(screamFigureShell, {
+    rotation: -6,
+    x: -1,
+    duration: 0.10,
+    ease: "none"
+  }, 0.46)
+  .to(screamFigureShell, {
+    rotation: 5,
+    x: 1,
+    duration: 0.10,
+    ease: "none"
+  }, 0.56)
+  .to(screamFigureShell, {
+    rotation: 0,
+    x: 0,
+    duration: 0.12,
+    ease: "none"
+  }, 0.66)
 
   .to(middlePanel, {
     y: 0,
@@ -1867,53 +4104,53 @@ tlFall
   }, 0.88)
 
   // only now does the bottom panel come up
-.to(questionsPanel, {
-  y: () => `+=${getQuestionsPanelCenterDeltaY()}`,
-  autoAlpha: 1,
-  duration: 0.28,
-  ease: "none"
-}, 0.92)
+  .to(questionsPanel, {
+    y: () => getQuestionsPanelCenteredY(),
+    autoAlpha: 1,
+    duration: 0.50,
+    ease: "none"
+  }, 0.94)
 
   // hold panel for readability
   .to(questionsPanel, {
     autoAlpha: 1,
-    duration: 0.24,
+    duration: 0.34,
     ease: "none"
-  }, 1.10)
+  }, 1.38)
 
   // panel text vanishes first
   .to(panelContent, {
     autoAlpha: 0,
-    duration: 0.14,
+    duration: 0.18,
     ease: "none"
-  }, 1.24)
+  }, 1.56)
 
   // split and fall
   .to(splitLeftHalf, {
-    x: () => -(window.innerWidth * 0.8),
-    y: () => window.innerHeight * 1.25,
-    rotation: -46,
+    x: () => -(window.innerWidth * 0.52),
+    y: () => window.innerHeight * 0.84,
+    rotation: -28,
     autoAlpha: 1,
-    duration: 0.44,
+    duration: 0.68,
     ease: "none"
-  }, 1.30)
+  }, 1.62)
   .to(splitRightHalf, {
-    x: () => window.innerWidth * 0.8,
-    y: () => window.innerHeight * 1.25,
-    rotation: 46,
+    x: () => window.innerWidth * 0.52,
+    y: () => window.innerHeight * 0.84,
+    rotation: 28,
     autoAlpha: 1,
-    duration: 0.44,
+    duration: 0.68,
     ease: "none"
-  }, 1.30)
+  }, 1.62)
 
   // lock reveal text to exact viewport center before showing
   .set(revealText, {
     left: "50%",
-    top: "42%",
+    top: "50%",
     xPercent: -50,
     yPercent: -50,
     y: 0
-  }, 1.27)
+  }, 1.55)
 
   // reveal final text behind split panel
   .fromTo(revealText, {
@@ -1922,42 +4159,44 @@ tlFall
   }, {
     autoAlpha: 1,
     scale: 1,
-    duration: 0.28,
+    duration: 0.30,
     ease: "none"
-  }, 1.28)
+  }, 1.58)
 
   // zoom text into white transition
   .to(revealText, {
     scale: 4.9,
     autoAlpha: 1,
-    duration: 0.38,
+    duration: 0.44,
     ease: "none"
-  }, 1.68)
+  }, 2.02)
   .to([splitLeftHalf, splitRightHalf], {
     autoAlpha: 0,
-    duration: 0.14,
+    duration: 0.16,
     ease: "none"
-  }, 1.78)
+  }, 2.20)
   .to(ch3, {
     backgroundColor: "var(--surface-primary)",
-    duration: 0.30,
+    duration: 0.28,
     ease: "none"
-  }, 1.82)
+  }, 2.24)
   .set([floatingIcons, staticParallaxIcons], {
     autoAlpha: 0,
-  }, 1.98)
+  }, 2.34)
   .set(revealText, {
     autoAlpha: 0,
-  }, 2.22);
+  }, 2.44);
 
   // Keep icon motion tied to the same pinned timeline to prevent scroll-jump conflicts.
+  const iconMotionDuration = 2.34;
+
   floatingIcons.forEach((icon) => {
     tlFall.to(icon, {
       y: gsap.utils.random(260, 760),
       x: gsap.utils.random(-160, 160),
       rotation: `+=${gsap.utils.random(-140, 140)}`,
       autoAlpha: gsap.utils.random(0.08, 0.24),
-      duration: 1,
+      duration: iconMotionDuration,
       ease: "none"
     }, 0);
   });
@@ -1968,9 +4207,274 @@ tlFall
       x: gsap.utils.random(-180, 180),
       rotation: `+=${gsap.utils.random(-170, 170)}`,
       autoAlpha: gsap.utils.random(0.08, 0.22),
-      duration: 1,
+      duration: iconMotionDuration,
       ease: "none"
     }, 0);
   });
 
+});
+
+
+/* =========================================================
+   CHAPTER 7 — sequential fades + full-viewport finale wipe
+   ========================================================= */
+document.addEventListener("DOMContentLoaded", () => {
+  const ch7 = document.querySelector("#chapter-7");
+  const finaleSection = document.querySelector("#chapter-7-finale");
+  if (!ch7) return;
+  if (!finaleSection) return;
+
+  const content = ch7.querySelector(".section__content");
+  if (!content) return;
+
+  const panels = Array.from(content.querySelectorAll(".panel"));
+  if (panels.length < 6) return;
+
+  const introPanels = panels.slice(0, 6);
+  const finalPanel = finaleSection.querySelector("#ch7-final-panel");
+  const scrollToTopBtn = document.querySelector("#scroll-to-top-btn");
+  if (!finalPanel) return;
+
+  let scrollUpLinesLayer = document.querySelector("#scroll-up-lines");
+  if (!scrollUpLinesLayer) {
+    scrollUpLinesLayer = document.createElement("div");
+    scrollUpLinesLayer.id = "scroll-up-lines";
+    scrollUpLinesLayer.setAttribute("aria-hidden", "true");
+    document.body.appendChild(scrollUpLinesLayer);
+  }
+
+  let scrollUpFxTween = null;
+  const playScrollUpFx = () => {
+    if (!scrollUpLinesLayer) return;
+    scrollUpLinesLayer.innerHTML = "";
+
+    const palette = [
+      "var(--accent-primary)",
+      "var(--accent-secondary)",
+      "var(--accent-highlight)",
+      "#ff6b35",
+      "#3b82f6",
+      "#f59e0b"
+    ];
+    const lineCount = 42;
+    const lines = [];
+    const viewportHeight = window.innerHeight || 900;
+
+    for (let i = 0; i < lineCount; i += 1) {
+      const line = document.createElement("span");
+      line.className = "scroll-up-line";
+      line.style.width = `${gsap.utils.random(2, 4, 1)}px`;
+      line.style.height = `${gsap.utils.random(240, 620, 1)}px`;
+      line.style.left = `${gsap.utils.random(-2, 98, 1)}vw`;
+      line.style.top = `${gsap.utils.random(108, 170, 1)}vh`;
+      line.style.backgroundColor = palette[i % palette.length];
+      scrollUpLinesLayer.appendChild(line);
+
+      gsap.set(line, {
+        rotation: 0,
+        scaleY: gsap.utils.random(0.56, 1),
+        autoAlpha: 0
+      });
+      lines.push(line);
+    }
+
+    if (scrollUpFxTween) {
+      scrollUpFxTween.kill();
+      scrollUpFxTween = null;
+    }
+
+    scrollUpFxTween = gsap.timeline({
+      defaults: { ease: "none" },
+      onComplete: () => {
+        gsap.set(scrollUpLinesLayer, { autoAlpha: 0 });
+        scrollUpLinesLayer.innerHTML = "";
+        scrollUpFxTween = null;
+      }
+    });
+
+    scrollUpFxTween
+      .set(scrollUpLinesLayer, { autoAlpha: 1 }, 0)
+      .to(lines, {
+        autoAlpha: 0.94,
+        duration: 0.08,
+        stagger: { each: 0.006, from: "random" }
+      }, 0)
+      .to(lines, {
+        y: () => -gsap.utils.random(viewportHeight * 1.7, viewportHeight * 2.35),
+        x: 0,
+        autoAlpha: 0,
+        duration: () => gsap.utils.random(0.95, 1.45),
+        stagger: { each: 0.008, from: "random" }
+      }, 0.02);
+  };
+
+  if (scrollToTopBtn && !scrollToTopBtn.dataset.bound) {
+    scrollToTopBtn.dataset.bound = "true";
+    scrollToTopBtn.addEventListener("click", () => {
+      const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      if (!reducedMotion) {
+        playScrollUpFx();
+      }
+      window.scrollTo({
+        top: 0,
+        behavior: "smooth"
+      });
+    });
+  }
+
+  let wipe = document.querySelector("#ch7-end-wipe");
+  if (!wipe) {
+    wipe = document.createElement("div");
+    wipe.id = "ch7-end-wipe";
+    wipe.setAttribute("aria-hidden", "true");
+    document.body.appendChild(wipe);
+  }
+
+  const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const introTriggerId = "ch7-sequential-fade";
+  const finaleTriggerId = "ch7-finale";
+  const introFadeDuration = 3.2;
+  const introPauseDuration = 0.0;
+  const introSegmentDuration = introFadeDuration + introPauseDuration;
+  const introTotalDuration = ((introPanels.length - 1) * introSegmentDuration) + introFadeDuration + 0.4;
+  let tlIntro = null;
+  let tlFinale = null;
+
+  const killExisting = () => {
+    const existingIntro = ScrollTrigger.getById(introTriggerId);
+    if (existingIntro) existingIntro.kill();
+    const existingFinale = ScrollTrigger.getById(finaleTriggerId);
+    if (existingFinale) existingFinale.kill();
+
+    if (tlIntro) {
+      tlIntro.kill();
+      tlIntro = null;
+    }
+    if (tlFinale) {
+      tlFinale.kill();
+      tlFinale = null;
+    }
+  };
+
+  const setRestState = () => {
+    gsap.set(introPanels, {
+      autoAlpha: 0,
+      y: 24,
+      scale: 0.985,
+      force3D: true
+    });
+
+    gsap.set(finalPanel, {
+      autoAlpha: 0,
+      y: 34,
+      scale: 0.965,
+      transformOrigin: "50% 50%",
+      force3D: true
+    });
+
+    gsap.set(wipe, {
+      autoAlpha: 0,
+      scaleY: 0,
+      transformOrigin: "50% 100%"
+    });
+
+    if (scrollToTopBtn) {
+      gsap.set(scrollToTopBtn, {
+        autoAlpha: 0,
+        y: 14,
+        pointerEvents: "none"
+      });
+    }
+  };
+
+  if (prefersReducedMotion) {
+    killExisting();
+    gsap.set([...introPanels, finalPanel], { clearProps: "all" });
+    gsap.set(wipe, { autoAlpha: 0, scaleY: 0 });
+    if (scrollToTopBtn) gsap.set(scrollToTopBtn, { autoAlpha: 0, y: 14, pointerEvents: "none" });
+    return;
+  }
+
+  const setupChapter7Timelines = () => {
+    killExisting();
+    setRestState();
+
+    tlIntro = gsap.timeline({
+      scrollTrigger: {
+        id: introTriggerId,
+        trigger: ch7,
+        start: "top top",
+        end: () => `+=${Math.round(window.innerHeight * Math.max(4.2, introTotalDuration * 0.24))}`,
+        scrub: 0.8,
+        pin: ch7,
+        pinSpacing: true,
+        anticipatePin: 1,
+        invalidateOnRefresh: true
+      }
+    });
+
+    introPanels.forEach((panel, index) => {
+      tlIntro.to(panel, {
+        autoAlpha: 1,
+        y: 0,
+        scale: 1,
+        duration: introFadeDuration,
+        ease: "none"
+      }, index * introSegmentDuration);
+    });
+    tlIntro.to({}, { duration: 0.4, ease: "none" }, introTotalDuration);
+
+    tlFinale = gsap.timeline({
+      scrollTrigger: {
+        id: finaleTriggerId,
+        trigger: finaleSection,
+        start: "top top",
+        end: () => `+=${Math.round(window.innerHeight * 3.1)}`,
+        scrub: 0.7,
+        pin: finaleSection,
+        pinSpacing: true,
+        anticipatePin: 1,
+        onUpdate: (self) => {
+          if (!scrollToTopBtn) return;
+          scrollToTopBtn.style.pointerEvents = self.progress >= 0.98 ? "auto" : "none";
+        },
+        invalidateOnRefresh: true
+      }
+    });
+
+    tlFinale
+      .to(finalPanel, {
+        autoAlpha: 1,
+        y: 0,
+        scale: 1,
+        duration: 0.8,
+        ease: "none"
+      }, 0)
+      .to({}, { duration: 5 }, 0.8)
+      .to(finalPanel, {
+        keyframes: [
+          { y: -18, scale: 1.035, duration: 0.18, ease: "none" },
+          { y: 6, scale: 0.992, duration: 0.14, ease: "none" },
+          { y: -140, scale: 0.9, autoAlpha: 0, duration: 0.64, ease: "none" }
+        ]
+      }, 5.8)
+      .to(wipe, {
+        autoAlpha: 1,
+        scaleY: 1,
+        duration: 0.9,
+        ease: "none"
+      }, 6.08);
+
+    if (scrollToTopBtn) {
+      tlFinale.to(scrollToTopBtn, {
+        autoAlpha: 1,
+        y: 0,
+        duration: 0.24,
+        ease: "none"
+      }, 7.0);
+    }
+  };
+
+  setupChapter7Timelines();
+  window.addEventListener("comic:resize-settled", setupChapter7Timelines);
 });
