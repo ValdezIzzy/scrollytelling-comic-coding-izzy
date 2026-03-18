@@ -14,6 +14,45 @@ window.addEventListener("resize", () => {
 const THEME_MODE_KEY = "comic-site-theme-mode";
 const LEGACY_THEME_KEY = "comic-site-theme";
 const systemThemeQuery = window.matchMedia("(prefers-color-scheme: dark)");
+const reducedMotionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
+let prefersReducedMotionGlobal = reducedMotionQuery.matches;
+document.documentElement.classList.toggle("reduced-motion", prefersReducedMotionGlobal);
+
+const updateReducedMotionState = () => {
+  prefersReducedMotionGlobal = reducedMotionQuery.matches;
+  document.documentElement.classList.toggle("reduced-motion", prefersReducedMotionGlobal);
+  if (prefersReducedMotionGlobal && document.readyState !== "loading") {
+    applyReducedMotionFallback();
+  }
+};
+
+if (reducedMotionQuery.addEventListener) {
+  reducedMotionQuery.addEventListener("change", updateReducedMotionState);
+} else if (reducedMotionQuery.addListener) {
+  reducedMotionQuery.addListener(updateReducedMotionState);
+}
+
+const makeKeyboardActivatable = (element, fallbackLabel) => {
+  if (!element) return;
+  if (element.dataset.kbdBound === "1") return;
+  element.dataset.kbdBound = "1";
+
+  const isNativeInteractive = /^(BUTTON|A|INPUT|SELECT|TEXTAREA)$/.test(element.tagName);
+  if (!isNativeInteractive) {
+    if (!element.hasAttribute("tabindex")) element.setAttribute("tabindex", "0");
+    if (!element.hasAttribute("role")) element.setAttribute("role", "button");
+  }
+
+  if (fallbackLabel && !element.getAttribute("aria-label")) {
+    element.setAttribute("aria-label", fallbackLabel);
+  }
+
+  element.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" && event.key !== " " && event.code !== "Space") return;
+    event.preventDefault();
+    element.click();
+  });
+};
 
 const normalizeThemeMode = (mode) => {
   if (mode === "light" || mode === "dark" || mode === "system") return mode;
@@ -705,7 +744,6 @@ document.addEventListener("DOMContentLoaded", () => {
       pin: true,
       pinSpacing: true,
       invalidateOnRefresh: true
-      // markers: true
     }
   });
 
@@ -1942,6 +1980,12 @@ document.addEventListener("DOMContentLoaded", () => {
       color: "var(--text-primary)"
     });
 
+    const syncBlackoutSpacerBackground = (self) => {
+      const spacer = self?.pin?.parentNode;
+      if (!spacer || !spacer.classList?.contains("pin-spacer")) return;
+      spacer.style.background = getComputedStyle(blackoutSection).backgroundColor;
+    };
+
     blackoutScrollTrigger = ScrollTrigger.create({
       id: blackoutTriggerId,
       trigger: blackoutTriggerTarget,
@@ -1953,7 +1997,8 @@ document.addEventListener("DOMContentLoaded", () => {
       anticipatePin: 1,
       animation: timeline,
       invalidateOnRefresh: true,
-      onEnter: () => {
+      onEnter: (self) => {
+        syncBlackoutSpacerBackground(self);
         timeline.progress(0).pause(0);
       },
       onLeaveBack: () => {
@@ -1970,6 +2015,7 @@ document.addEventListener("DOMContentLoaded", () => {
         });
       },
       onUpdate: (self) => {
+        syncBlackoutSpacerBackground(self);
         if (self.progress < 0.08) {
           gsap.set(blackoutPanel, {
             backgroundColor: "var(--surface-primary)",
@@ -1982,6 +2028,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       },
       onRefresh: (self) => {
+        syncBlackoutSpacerBackground(self);
         if (window.scrollY <= (self.start + 2)) {
           timeline.progress(0).pause(0);
           gsap.set(blackoutPanel, {
@@ -2070,6 +2117,7 @@ document.addEventListener("DOMContentLoaded", () => {
     tiltedPanels.forEach((panel, index) => {
       const cfg = tiltedSpinConfigs[index] || tiltedSpinConfigs[0];
       panel.style.cursor = "pointer";
+      makeKeyboardActivatable(panel, `Activate ${panel.textContent?.trim() || "panel"}`);
       panel.addEventListener("click", () => {
         if (panel.dataset.spinBusy === "1") return;
         panel.dataset.spinBusy = "1";
@@ -2502,7 +2550,6 @@ document.addEventListener("DOMContentLoaded", () => {
         pinSpacing: true,
         anticipatePin: 1,
         invalidateOnRefresh: true
-        // markers: true
       }
     });
 
@@ -2944,7 +2991,6 @@ document.addEventListener("DOMContentLoaded", () => {
         end: phaseEndFirst,
         scrub: 0.28,
         invalidateOnRefresh: true
-        // markers: true
       }
     });
     addRandomPanelAnimations(tlCh6First, firstGroup, {
@@ -2966,7 +3012,6 @@ document.addEventListener("DOMContentLoaded", () => {
         end: phaseEndSecond,
         scrub: 0.22,
         invalidateOnRefresh: true
-        // markers: true
       }
     });
     addRandomPanelAnimations(tlCh6Second, secondGroup, {
@@ -2988,7 +3033,6 @@ document.addEventListener("DOMContentLoaded", () => {
         end: phaseEndThird,
         scrub: 0.22,
         invalidateOnRefresh: true
-        // markers: true
       }
     });
     addRandomPanelAnimations(tlCh6Third, thirdGroup, {
@@ -3273,6 +3317,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   ch1Panels.forEach((panel) => {
     const content = panel.children;
+    makeKeyboardActivatable(panel, `Open panel: ${panel.textContent?.trim() || "Chapter 1 item"}`);
 
     panel.classList.add("is-ghost");
 
@@ -3396,7 +3441,6 @@ document.addEventListener("DOMContentLoaded", () => {
           resetCh1Panel(panel);
         });
       }
-      // markers: true
     }
   }).to(ch1Panels, {
     autoAlpha: 0,
@@ -3429,7 +3473,6 @@ document.addEventListener("DOMContentLoaded", () => {
   const p7 = content.querySelector("#arrow + .panel");
 
   if (!p1 || !p2 || !p3 || !p4 || !p5 || !p6 || !arrowWrap || !p7) {
-    console.log("Chapter 2 panels not found correctly");
     return;
   }
 
@@ -3471,7 +3514,6 @@ document.addEventListener("DOMContentLoaded", () => {
       pin: true,
       pinSpacing: true,
       invalidateOnRefresh: true
-      // markers: true
     }
   });
 
@@ -3529,7 +3571,6 @@ document.addEventListener("DOMContentLoaded", () => {
       end: "top 15%",
       scrub: 1,
       invalidateOnRefresh: true
-      // markers: true
     }
   });
 
@@ -3640,7 +3681,6 @@ document.addEventListener("DOMContentLoaded", () => {
       pin: true,
       pinSpacing: true,
       invalidateOnRefresh: true
-      // markers: true
     }
   });
 
@@ -3752,7 +3792,6 @@ document.addEventListener("DOMContentLoaded", () => {
     !splitRightHalf ||
     !panelContent
   ) {
-    console.log("Chapter 3 elements not found correctly");
     return;
   }
 
@@ -3954,7 +3993,6 @@ const tlFall = gsap.timeline({
         autoAlpha: 0
       });
     }
-    // markers: true
   }
 });
 
@@ -4477,4 +4515,47 @@ document.addEventListener("DOMContentLoaded", () => {
 
   setupChapter7Timelines();
   window.addEventListener("comic:resize-settled", setupChapter7Timelines);
+});
+
+/* =========================================================
+   GLOBAL REDUCED-MOTION FALLBACK
+   Ensures fully readable static content when motion is reduced.
+   ========================================================= */
+function applyReducedMotionFallback() {
+  requestAnimationFrame(() => {
+    ScrollTrigger.getAll().forEach((trigger) => trigger.kill(true));
+
+    document.querySelectorAll(".pin-spacer").forEach((spacer) => {
+      const parent = spacer.parentNode;
+      const child = spacer.firstElementChild;
+      if (!parent || !child) return;
+      parent.insertBefore(child, spacer);
+      spacer.remove();
+    });
+
+    const revealTargets = document.querySelectorAll(
+      ".section--hero .section__content > *, .section--chapter .panel, #chapter-3 #text-reveal, #chapter-4 #full-view-panel, #chapter-5-blackout #blackout, #chapter-7-finale #ch7-final-panel"
+    );
+    gsap.set(revealTargets, {
+      autoAlpha: 1,
+      opacity: 1,
+      x: 0,
+      y: 0,
+      scale: 1,
+      rotation: 0
+    });
+
+    gsap.set("#chapter-3-panel-5 .panel-content", { autoAlpha: 1 });
+    gsap.set(
+      "#chapter-3 .panel-half, #chapter-2 .ch2-fx, #chapter-3 .parallax-icons, #chapter-3 .ch3-icon-rain, #chapter-4 .ch4-fireworks, #chapter-5-outro #ch5-outro-wipe, #ch7-end-wipe",
+      { autoAlpha: 0, display: "none" }
+    );
+
+    ScrollTrigger.refresh();
+  });
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  if (!prefersReducedMotionGlobal) return;
+  applyReducedMotionFallback();
 });
